@@ -49,7 +49,8 @@ Esta aplicación permite extraer información de productos desde múltiples siti
         ```
     *   **Celery Worker:**
         ```bash
-        celery -A backend.main.celery_app worker --loglevel=info
+        # Ajusta "-c" para lanzar múltiples procesos y acelerar el scraping
+        celery -A backend.main.celery_app worker -c 4 --loglevel=info
         ```
     *   **FastAPI Server:**
         ```bash
@@ -59,6 +60,8 @@ Esta aplicación permite extraer información de productos desde múltiples siti
 5.  **Abrir el frontend:**
     Abre el archivo `frontend/index.html` en tu navegador.
 
-Los datos extraídos se guardan tanto en `results.jsonl` como en la base de datos
-SQLite `scraper.db` para mantener un registro persistente de todos los productos
-procesados.
+Los datos extraídos se guardan tanto en `results.jsonl` como en la base de datos SQLite `scraper.db` (o la ruta especificada en la variable de entorno `SCRAPER_DB`) para mantener un registro persistente de todos los productos procesados.
+
+## Seguimiento de progreso
+
+Al iniciar un trabajo, el backend calcula primero cuántas URLs se van a procesar y expone esa información a través del endpoint `/scrape/status/{task_id}`. El frontend muestra desde el principio el total de URLs y va actualizando el número de exitos y fallos conforme avanzan los workers.
