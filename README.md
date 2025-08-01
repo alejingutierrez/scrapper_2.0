@@ -58,3 +58,7 @@ Esta aplicación permite extraer información de productos desde múltiples siti
 
 5.  **Abrir el frontend:**
     Abre el archivo `frontend/index.html` en tu navegador.
+
+Los datos extraídos se guardan tanto en `results.jsonl` como en la base de datos
+SQLite `scraper.db` para mantener un registro persistente de todos los productos
+procesados.

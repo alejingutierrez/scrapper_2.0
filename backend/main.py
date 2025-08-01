@@ -15,6 +15,8 @@ from playwright.async_api import async_playwright
 
 # Importar nuestros módulos de scraping
 from scraper import crawler, browser, extractor
+from . import database
+from scraper import storage
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -29,6 +31,7 @@ celery_app.conf.update(
 
 # --- Aplicación FastAPI ---
 app = FastAPI(title="Scraper API", version="1.0.0")
+database.init_db()
 
 # --- Configuración de CORS ---
 # Permite que el frontend (servido desde un archivo local) se comunique con la API.
@@ -65,10 +68,11 @@ async def scrape_single_url(task_self, url: str):
             product_data = await extractor.extract_product_data_from_html(url, html)
             if not product_data:
                 return {"url": url, "status": "failed", "reason": "No se pudieron extraer datos"}
-            
-            # Guardar el resultado en un archivo JSONL
+
+            # Guardar en archivo y base de datos
             with open("results.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(product_data, ensure_ascii=False) + "\n")
+            storage.save_product(product_data)
             
             await pw_browser.close()
             return {"url": url, "status": "success", "data": product_data['title']}
