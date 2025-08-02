@@ -66,3 +66,7 @@ La base de datos almacena cada trabajo de scraping y sus resultados asociados, l
 ## Seguimiento de progreso
 
 Al iniciar un trabajo, el backend calcula primero cuántas URLs se van a procesar y expone esa información a través del endpoint `/scrape/status/{task_id}`. El frontend muestra desde el principio el total de URLs y va actualizando el número de exitos y fallos conforme avanzan los workers.
+
+## Escalado dinámico de workers
+
+Cuando se ejecuta con Docker Compose, el backend ajusta automáticamente la cantidad de contenedores `worker` para mantener cinco procesos por cada trabajo activo. Al finalizar o cancelar un trabajo, los contenedores sobrantes se detienen, liberando recursos sin intervención manual.

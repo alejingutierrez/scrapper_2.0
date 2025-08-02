@@ -2,6 +2,8 @@ import os
 import logging
 import asyncio
 import json
+import subprocess
+import math
 from dotenv import load_dotenv
 
 # Cargar variables de entorno ANTES de cualquier otra importación del proyecto
@@ -33,6 +35,41 @@ celery_app.conf.update(
 # --- Aplicación FastAPI ---
 app = FastAPI(title="Scraper API", version="1.0.0")
 database.init_db()
+
+WORKERS_PER_JOB = int(os.getenv("WORKERS_PER_JOB", "5"))
+WORKER_CONTAINER_CONCURRENCY = int(os.getenv("WORKER_CONCURRENCY", "5"))
+
+
+def scale_worker_containers() -> None:
+    """Scale Celery worker containers based on running jobs.
+
+    Each job requires ``WORKERS_PER_JOB`` worker processes. Docker containers
+    are scaled so that each container provides ``WORKER_CONTAINER_CONCURRENCY``
+    processes. Any error during scaling is logged but ignored to keep the
+    scraping flow running even when Docker is unavailable (e.g. during tests).
+    """
+    active_jobs = database.count_jobs_by_status("RUNNING")
+    required_workers = active_jobs * WORKERS_PER_JOB
+    target_containers = (
+        math.ceil(required_workers / WORKER_CONTAINER_CONCURRENCY)
+        if required_workers
+        else 0
+    )
+    try:  # pragma: no cover - depends on docker being available
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "up",
+                "--scale",
+                f"worker={target_containers}",
+                "-d",
+            ],
+            check=True,
+        )
+        logging.info("Scaled workers to %s containers", target_containers)
+    except Exception as exc:  # pragma: no cover - best effort
+        logging.warning("Could not scale workers: %s", exc)
 
 # --- Configuración de CORS ---
 # Permite que el frontend (servido desde un archivo local) se comunique con la API.
@@ -112,6 +149,7 @@ def finalize_scraping_task(self, results, job_id: str):
     total = len(results)
     success = sum(1 for r in results if r and r.get("status") == "success")
     database.update_job_status(job_id, "COMPLETED")
+    scale_worker_containers()
     logging.info(
         f"[Finalize] Job {job_id} completado. {success}/{total} URLs procesadas exitosamente."
     )
@@ -146,6 +184,7 @@ async def orchestrate_scraping(task_self, domains: list[str]):
         total_urls = len(all_urls)
         job_id = task_self.request.id
         database.create_job(job_id, total_urls, all_urls)
+        scale_worker_containers()
 
         task_self.update_state(
             state="PROGRESS",
@@ -262,6 +301,7 @@ async def pause_job(task_id: str):
             for child in group_result.children:
                 celery_app.control.revoke(child.id, terminate=True)
     database.update_job_status(task_id, "PAUSED")
+    scale_worker_containers()
     return {"status": "paused"}
 
 
@@ -273,11 +313,13 @@ async def resume_job(task_id: str):
     pending = database.get_pending_urls(task_id)
     if not pending:
         database.update_job_status(task_id, "COMPLETED")
+        scale_worker_containers()
         return {"status": "completed"}
     tasks_group = group(process_url_task.s(task_id, url) for url in pending)
     result_group = tasks_group.apply_async()
     database.update_job_group(task_id, result_group.id)
     database.update_job_status(task_id, "RUNNING")
+    scale_worker_containers()
     return {"status": "resumed", "pending": len(pending)}
 
 
@@ -292,6 +334,7 @@ async def stop_job(task_id: str):
             for child in group_result.children:
                 celery_app.control.revoke(child.id, terminate=True)
     database.update_job_status(task_id, "CANCELLED")
+    scale_worker_containers()
     return {"status": "cancelled"}
 
 

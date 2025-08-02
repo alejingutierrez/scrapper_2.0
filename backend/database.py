@@ -141,6 +141,11 @@ def get_results_by_job(job_id: str) -> List[dict]:
         ]
 
 
+def count_jobs_by_status(status: str) -> int:
+    with SessionLocal() as session:
+        return session.query(Job).filter_by(status=status).count()
+
+
 def job_exists(job_id: str) -> bool:
     return get_job(job_id) is not None
 
