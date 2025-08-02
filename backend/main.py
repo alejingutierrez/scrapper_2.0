@@ -50,6 +50,9 @@ async def add_cors_headers(request: Request, call_next):
     """Garantiza cabeceras CORS incluso en respuestas de error."""
     try:
         response = await call_next(request)
+    except HTTPException as exc:
+        # Preserve FastAPI HTTP exceptions and status codes
+        response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
     except Exception as exc:  # pragma: no cover - protección ante errores inesperados
         logging.exception("Unhandled server error: %s", exc)
         response = JSONResponse({"detail": "Internal Server Error"}, status_code=500)
