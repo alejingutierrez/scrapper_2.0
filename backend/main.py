@@ -49,31 +49,33 @@ class ScrapeRequest(BaseModel):
 # --- Tareas de Celery ---
 
 @celery_app.task(name="process_url_task", bind=True, acks_late=True, max_retries=2)
-def process_url_task(self, url: str):
+def process_url_task(self, job_id: str, url: str):
     """Tarea síncrona que envuelve la lógica asíncrona de scraping."""
-    return asyncio.run(scrape_single_url(self, url))
+    return asyncio.run(scrape_single_url(self, job_id, url))
 
-async def scrape_single_url(task_self, url: str):
+async def scrape_single_url(task_self, job_id: str, url: str):
     """Lógica asíncrona real para procesar una única URL."""
     logging.info(f"[URL Task] Iniciando procesamiento de: {url}")
     try:
         async with async_playwright() as pw:
             pw_browser = await pw.chromium.launch(headless=True)
             context = await pw_browser.new_context(user_agent=browser.HEADERS['User-Agent'])
-            
+
             html = await browser.get_html_from_url(context, url)
             if not html:
+                storage.save_product(job_id, url, {"reason": "No se pudo obtener HTML"}, "failed")
                 return {"url": url, "status": "failed", "reason": "No se pudo obtener HTML"}
-            
+
             product_data = await extractor.extract_product_data_from_html(url, html)
             if not product_data:
+                storage.save_product(job_id, url, {"reason": "No se pudieron extraer datos"}, "failed")
                 return {"url": url, "status": "failed", "reason": "No se pudieron extraer datos"}
 
             # Guardar en archivo y base de datos
             with open("results.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps(product_data, ensure_ascii=False) + "\n")
-            storage.save_product(product_data)
-            
+            storage.save_product(job_id, url, product_data, "success")
+
             await pw_browser.close()
             return {"url": url, "status": "success", "data": product_data['title']}
     except Exception as e:
@@ -94,27 +96,31 @@ async def orchestrate_scraping(task_self, domains: list[str]):
     
     url_lists = await asyncio.gather(*[crawler.get_urls_for_domain(domain) for domain in domains])
     all_urls = [url for sublist in url_lists for url in sublist]
-    
+
     if not all_urls:
         logging.warning("[Main Task] No se encontraron URLs para procesar.")
         task_self.update_state(state='SUCCESS', meta={'status': 'No URLs found'})
         return {'status': 'No URLs found', 'total': 0}
 
     total_urls = len(all_urls)
+    job_id = task_self.request.id
+    database.create_job(job_id, total_urls)
+
     task_self.update_state(state='PROGRESS', meta={'total': len(all_urls), 'status': 'Descubriendo URLs...'})
     logging.info(f"Se descubrieron {len(all_urls)} URLs para los dominios: {domains}")
 
     if all_urls:
-        tasks_group = group(process_url_task.s(url) for url in all_urls)
+        tasks_group = group(process_url_task.s(job_id, url) for url in all_urls)
         result_group = tasks_group.apply_async()
-        
+
         task_self.update_state(state='PROGRESS', meta={'task_group_id': result_group.id, 'total': len(all_urls), 'status': 'Procesando URLs...'})
         logging.info(f"Grupo de tareas {result_group.id} lanzado.")
 
-        completed_results = result_group.get() 
-        
-        final_results = [item for sublist in completed_results if sublist for item in sublist]
-        
+        completed_results = result_group.get()
+        database.update_job_status(job_id, "COMPLETED")
+
+        final_results = [res for res in completed_results if res and res.get('status') == 'success']
+
         return {'status': 'Completed', 'total_urls_processed': len(all_urls), 'products_found': len(final_results)}
     else:
         logging.warning("No se encontraron URLs para procesar.")
@@ -132,6 +138,14 @@ async def create_scraping_job(req: ScrapeRequest):
         raise HTTPException(status_code=400, detail="La lista de dominios no puede estar vacía.")
     task = start_scraping_task.delay(req.domains)
     return {"message": "Trabajo de scraping iniciado", "task_id": task.id}
+
+
+@app.get("/scrape/results/{task_id}", summary="Obtener resultados de un trabajo")
+async def get_scraping_results(task_id: str):
+    if not database.job_exists(task_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    results = database.get_results_by_job(task_id)
+    return {"task_id": task_id, "results": results}
 
 @app.get("/scrape/status/{task_id}", summary="Consultar estado de un trabajo")
 async def get_scraping_status(task_id: str):
