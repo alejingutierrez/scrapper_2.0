@@ -75,7 +75,7 @@ async def scrape_single_url(task_self, job_id: str, url: str):
     """Lógica asíncrona real para procesar una única URL."""
     logging.info(f"[URL Task] Iniciando procesamiento de: {url}")
     job = database.get_job(job_id)
-    if not job or job.status != "RUNNING":
+    if not job or job["status"] != "RUNNING":
         logging.info(f"[URL Task] Job {job_id} no activo. Saltando {url}")
         return {"url": url, "status": "skipped"}
     try:
@@ -213,10 +213,10 @@ async def get_scraping_status(task_id: str):
     success = sum(1 for r in results if r["status"] == "success")
     failed = sum(1 for r in results if r["status"] == "failed")
     completed = success + failed
-    percent = (completed / job.total_urls * 100) if job.total_urls else 0
+    percent = (completed / job["total_urls"] * 100) if job["total_urls"] else 0
 
     error_detail = None
-    if job.status == "FAILED":
+    if job["status"] == "FAILED":
         try:
             async_result = celery_app.AsyncResult(task_id)
             error_detail = str(async_result.info)
@@ -226,9 +226,9 @@ async def get_scraping_status(task_id: str):
 
     return {
         "task_id": task_id,
-        "status": job.status,
+        "status": job["status"],
         "progress": {
-            "total": job.total_urls,
+            "total": job["total_urls"],
             "completed": completed,
             "success": success,
             "failed": failed,
@@ -241,10 +241,10 @@ async def get_scraping_status(task_id: str):
 @app.post("/scrape/pause/{task_id}", summary="Pausar un trabajo en ejecución")
 async def pause_job(task_id: str):
     job = database.get_job(task_id)
-    if not job or job.status != "RUNNING":
+    if not job or job["status"] != "RUNNING":
         raise HTTPException(status_code=400, detail="Job not running")
-    if job.task_group_id:
-        group_result = celery_app.GroupResult.restore(job.task_group_id)
+    if job["task_group_id"]:
+        group_result = celery_app.GroupResult.restore(job["task_group_id"])
         if group_result:
             for child in group_result.children:
                 celery_app.control.revoke(child.id, terminate=True)
@@ -255,7 +255,7 @@ async def pause_job(task_id: str):
 @app.post("/scrape/resume/{task_id}", summary="Reanudar un trabajo pausado")
 async def resume_job(task_id: str):
     job = database.get_job(task_id)
-    if not job or job.status != "PAUSED":
+    if not job or job["status"] != "PAUSED":
         raise HTTPException(status_code=400, detail="Job not paused")
     pending = database.get_pending_urls(task_id)
     if not pending:
@@ -273,8 +273,8 @@ async def stop_job(task_id: str):
     job = database.get_job(task_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.task_group_id:
-        group_result = celery_app.GroupResult.restore(job.task_group_id)
+    if job["task_group_id"]:
+        group_result = celery_app.GroupResult.restore(job["task_group_id"])
         if group_result:
             for child in group_result.children:
                 celery_app.control.revoke(child.id, terminate=True)

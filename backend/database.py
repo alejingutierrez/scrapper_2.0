@@ -59,9 +59,25 @@ def update_job_group(job_id: str, group_id: str) -> None:
             session.commit()
 
 
-def get_job(job_id: str) -> Optional[Job]:
+def get_job(job_id: str) -> Optional[dict]:
+    """Retrieve a job by ID and return it as a plain dictionary.
+
+    Returning ORM instances after the session is closed can lead to
+    ``DetachedInstanceError`` when their attributes are accessed later on.
+    Converting the result to a simple ``dict`` avoids this problem and makes
+    the data easier to serialise and reason about.
+    """
     with SessionLocal() as session:
-        return session.get(Job, job_id)
+        job = session.get(Job, job_id)
+        if not job:
+            return None
+        return {
+            "id": job.id,
+            "total_urls": job.total_urls,
+            "status": job.status,
+            "urls": job.urls,
+            "task_group_id": job.task_group_id,
+        }
 
 
 def save_result(job_id: str, url: str, data: Optional[dict], status: str) -> None:
