@@ -9,6 +9,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from celery import Celery, group
 from pydantic import BaseModel
 from playwright.async_api import async_playwright
@@ -56,6 +57,10 @@ def process_url_task(self, job_id: str, url: str):
 async def scrape_single_url(task_self, job_id: str, url: str):
     """Lógica asíncrona real para procesar una única URL."""
     logging.info(f"[URL Task] Iniciando procesamiento de: {url}")
+    job = database.get_job(job_id)
+    if not job or job.status != "RUNNING":
+        logging.info(f"[URL Task] Job {job_id} no activo. Saltando {url}")
+        return {"url": url, "status": "skipped"}
     try:
         async with async_playwright() as pw:
             pw_browser = await pw.chromium.launch(headless=True)
@@ -104,16 +109,17 @@ async def orchestrate_scraping(task_self, domains: list[str]):
 
     total_urls = len(all_urls)
     job_id = task_self.request.id
-    database.create_job(job_id, total_urls)
+    database.create_job(job_id, total_urls, all_urls)
 
-    task_self.update_state(state='PROGRESS', meta={'total': len(all_urls), 'status': 'Descubriendo URLs...'})
-    logging.info(f"Se descubrieron {len(all_urls)} URLs para los dominios: {domains}")
+    task_self.update_state(state='PROGRESS', meta={'total': total_urls, 'status': 'Descubriendo URLs...'})
+    logging.info(f"Se descubrieron {total_urls} URLs para los dominios: {domains}")
 
     if all_urls:
         tasks_group = group(process_url_task.s(job_id, url) for url in all_urls)
         result_group = tasks_group.apply_async()
+        database.update_job_group(job_id, result_group.id)
 
-        task_self.update_state(state='PROGRESS', meta={'task_group_id': result_group.id, 'total': len(all_urls), 'status': 'Procesando URLs...'})
+        task_self.update_state(state='PROGRESS', meta={'task_group_id': result_group.id, 'total': total_urls, 'status': 'Procesando URLs...'})
         logging.info(f"Grupo de tareas {result_group.id} lanzado.")
 
         completed_results = result_group.get()
@@ -121,7 +127,7 @@ async def orchestrate_scraping(task_self, domains: list[str]):
 
         final_results = [res for res in completed_results if res and res.get('status') == 'success']
 
-        return {'status': 'Completed', 'total_urls_processed': len(all_urls), 'products_found': len(final_results)}
+        return {'status': 'Completed', 'total_urls_processed': total_urls, 'products_found': len(final_results)}
     else:
         logging.warning("No se encontraron URLs para procesar.")
         return {'status': 'Completed', 'total_urls_processed': 0, 'products_found': 0}
@@ -149,59 +155,84 @@ async def get_scraping_results(task_id: str):
 
 @app.get("/scrape/status/{task_id}", summary="Consultar estado de un trabajo")
 async def get_scraping_status(task_id: str):
-    """
-    Endpoint mejorado para consultar el estado de un trabajo de scraping.
-    Proporciona un desglose detallado del progreso, incluyendo éxitos y fallos.
-    """
-    main_task = celery_app.AsyncResult(task_id)
-    
-    if not main_task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    job = database.get_job(task_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
 
-    response = {
+    results = database.get_results_by_job(task_id)
+    success = sum(1 for r in results if r["status"] == "success")
+    failed = sum(1 for r in results if r["status"] == "failed")
+    completed = success + failed
+    percent = (completed / job.total_urls * 100) if job.total_urls else 0
+
+    return {
         "task_id": task_id,
-        "status": main_task.status,
-        "info": main_task.info
+        "status": job.status,
+        "progress": {
+            "total": job.total_urls,
+            "completed": completed,
+            "success": success,
+            "failed": failed,
+            "percent": f"{percent:.2f}%",
+        },
     }
 
-    if main_task.state == 'FAILURE':
-        return response
 
-    task_info = main_task.info if isinstance(main_task.info, dict) else {}
-    if not task_info and isinstance(main_task.result, dict):
-        task_info = main_task.result
-
-    group_id = task_info.get('task_group_id')
-    total_urls = task_info.get('total', 0)
-
-    if group_id:
-        # GroupResult tiene métodos más eficientes para contar
-        group_result = celery_app.GroupResult.restore(group_id)
+@app.post("/scrape/pause/{task_id}", summary="Pausar un trabajo en ejecución")
+async def pause_job(task_id: str):
+    job = database.get_job(task_id)
+    if not job or job.status != "RUNNING":
+        raise HTTPException(status_code=400, detail="Job not running")
+    if job.task_group_id:
+        group_result = celery_app.GroupResult.restore(job.task_group_id)
         if group_result:
-            success_count = group_result.successful_count()
-            failure_count = group_result.failed_count()
-            completed_count = success_count + failure_count
+            for child in group_result.children:
+                celery_app.control.revoke(child.id, terminate=True)
+    database.update_job_status(task_id, "PAUSED")
+    return {"status": "paused"}
 
-            progress_percent = (completed_count / total_urls * 100) if total_urls > 0 else 0
 
-            response['progress'] = {
-                "total": total_urls,
-                "completed": completed_count,
-                "success": success_count,
-                "failed": failure_count,
-                "percent": f"{progress_percent:.2f}%"
-            }
-    else:
-        # Si aún no se ha lanzado el grupo de tareas pero ya conocemos el total
-        if total_urls:
-            response['progress'] = {
-                "total": total_urls,
-                "completed": 0,
-                "success": 0,
-                "failed": 0,
-                "percent": "0%",
-            }
-        elif main_task.state == 'SUCCESS' and 'status' in task_info:
-            response['progress'] = task_info
+@app.post("/scrape/resume/{task_id}", summary="Reanudar un trabajo pausado")
+async def resume_job(task_id: str):
+    job = database.get_job(task_id)
+    if not job or job.status != "PAUSED":
+        raise HTTPException(status_code=400, detail="Job not paused")
+    pending = database.get_pending_urls(task_id)
+    if not pending:
+        database.update_job_status(task_id, "COMPLETED")
+        return {"status": "completed"}
+    tasks_group = group(process_url_task.s(task_id, url) for url in pending)
+    result_group = tasks_group.apply_async()
+    database.update_job_group(task_id, result_group.id)
+    database.update_job_status(task_id, "RUNNING")
+    return {"status": "resumed", "pending": len(pending)}
 
-    return response
+
+@app.post("/scrape/stop/{task_id}", summary="Cancelar un trabajo")
+async def stop_job(task_id: str):
+    job = database.get_job(task_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.task_group_id:
+        group_result = celery_app.GroupResult.restore(job.task_group_id)
+        if group_result:
+            for child in group_result.children:
+                celery_app.control.revoke(child.id, terminate=True)
+    database.update_job_status(task_id, "CANCELLED")
+    return {"status": "cancelled"}
+
+
+@app.delete("/scrape/{task_id}", summary="Eliminar un trabajo y sus resultados")
+async def delete_job(task_id: str):
+    if not database.job_exists(task_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    database.delete_job(task_id)
+    return {"status": "deleted"}
+
+
+@app.get("/scrape/download/{task_id}", summary="Descargar resultados de un trabajo")
+async def download_results(task_id: str):
+    if not database.job_exists(task_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    results = database.get_results_by_job(task_id)
+    return JSONResponse(content=results)

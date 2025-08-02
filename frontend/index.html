@@ -21,21 +21,31 @@ https://www.ejemplo2.com"></textarea>
                 <button id="start-scrape-btn">Iniciar Scraping</button>
             </div>
 
-            <div class="status-section">
-                <h2>Estado del Trabajo</h2>
-                <p id="job-status">En espera...</p>
-                <div class="progress-bar-container">
-                    <div id="progress-bar"></div>
+                <div class="status-section">
+                    <h2>Estado del Trabajo</h2>
+                    <p id="job-status">En espera...</p>
+                    <div class="progress-bar-container">
+                        <div id="progress-bar"></div>
+                    </div>
+                    <p id="progress-text"></p>
+                    <div id="progress-details"></div>
+                    <div class="controls">
+                        <button id="pause-btn" disabled>Pausar</button>
+                        <button id="resume-btn" disabled>Reanudar</button>
+                        <button id="stop-btn" disabled>Detener</button>
+                        <button id="download-btn" disabled>Descargar JSON</button>
+                    </div>
                 </div>
-                <p id="progress-text"></p>
-                <div id="progress-details"></div>
-            </div>
 
-            <div class="results-section">
-                <h2>Resultados</h2>
-                <p>Los resultados se guardarán en el archivo <code>results.jsonl</code> en la raíz del proyecto.</p>
-                <button id="download-excel-btn" disabled>Exportar a Excel (Próximamente)</button>
-            </div>
+                <div class="results-section">
+                    <h2>Resultados</h2>
+                    <table id="results-table">
+                        <thead>
+                            <tr><th>URL</th><th>Estado</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
         </main>
 
         <footer>
