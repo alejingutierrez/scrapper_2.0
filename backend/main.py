@@ -167,7 +167,7 @@ async def get_scraping_status(task_id: str):
             success_count = group_result.successful_count()
             failure_count = group_result.failed_count()
             completed_count = success_count + failure_count
-            
+
             progress_percent = (completed_count / total_urls * 100) if total_urls > 0 else 0
 
             response['progress'] = {
@@ -177,8 +177,17 @@ async def get_scraping_status(task_id: str):
                 "failed": failure_count,
                 "percent": f"{progress_percent:.2f}%"
             }
-    
-    elif main_task.state == 'SUCCESS' and 'status' in task_info:
-        response['progress'] = task_info
+    else:
+        # Si aún no se ha lanzado el grupo de tareas pero ya conocemos el total
+        if total_urls:
+            response['progress'] = {
+                "total": total_urls,
+                "completed": 0,
+                "success": 0,
+                "failed": 0,
+                "percent": "0%",
+            }
+        elif main_task.state == 'SUCCESS' and 'status' in task_info:
+            response['progress'] = task_info
 
     return response
