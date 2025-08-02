@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 # Cargar variables de entorno ANTES de cualquier otra importación del proyecto
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from celery import Celery, group, chord
@@ -43,6 +43,20 @@ app.add_middleware(
     allow_methods=["*"],  # Permite todos los métodos (GET, POST, etc.)
     allow_headers=["*"],  # Permite todas las cabeceras
 )
+
+
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    """Garantiza cabeceras CORS incluso en respuestas de error."""
+    try:
+        response = await call_next(request)
+    except Exception as exc:  # pragma: no cover - protección ante errores inesperados
+        logging.exception("Unhandled server error: %s", exc)
+        response = JSONResponse({"detail": "Internal Server Error"}, status_code=500)
+    response.headers.setdefault("Access-Control-Allow-Origin", "*")
+    response.headers.setdefault("Access-Control-Allow-Headers", "*")
+    response.headers.setdefault("Access-Control-Allow-Methods", "*")
+    return response
 
 class ScrapeRequest(BaseModel):
     domains: list[str]
