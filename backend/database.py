@@ -1,7 +1,16 @@
 import os
 from typing import List, Optional
 
-from sqlalchemy import create_engine, Column, Integer, String, JSON, ForeignKey
+from sqlalchemy import (
+    create_engine,
+    Column,
+    Integer,
+    String,
+    JSON,
+    ForeignKey,
+    inspect,
+    text,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 DB_PATH = os.getenv("SCRAPER_DB", "scraper.db")
@@ -32,7 +41,23 @@ class JobResult(Base):
 
 
 def init_db() -> None:
+    """Initialize database and ensure expected columns exist."""
     Base.metadata.create_all(bind=engine)
+
+    # ``create_all`` does not add new columns to existing tables. When the
+    # application is upgraded, older ``scraper.db`` files may miss recently
+    # introduced fields (e.g. the ``urls`` column).  Here we inspect the
+    # current schema and perform lightweight migrations if needed so the
+    # application can run without manual intervention.
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        columns = {col["name"] for col in inspector.get_columns("jobs")}
+
+        if "urls" not in columns:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN urls JSON"))
+
+        if "task_group_id" not in columns:
+            conn.execute(text("ALTER TABLE jobs ADD COLUMN task_group_id STRING"))
 
 
 def create_job(
