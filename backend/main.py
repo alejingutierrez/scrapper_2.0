@@ -200,8 +200,12 @@ async def get_scraping_status(task_id: str):
 
     error_detail = None
     if job.status == "FAILED":
-        async_result = celery_app.AsyncResult(task_id)
-        error_detail = str(async_result.info)
+        try:
+            async_result = celery_app.AsyncResult(task_id)
+            error_detail = str(async_result.info)
+        except Exception as e:  # pragma: no cover - safety net for unreachable backend
+            logging.exception("[Status] Error retrieving task result")
+            error_detail = f"Unable to fetch error details: {e}"
 
     return {
         "task_id": task_id,
