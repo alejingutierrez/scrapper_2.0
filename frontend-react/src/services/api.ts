@@ -48,7 +48,6 @@ export interface StartScrapingResponse {
 export interface JobStatusResponse {
   task_id: string;
   status: string;
-  info: any;
   progress?: {
     total: number;
     completed: number;
@@ -56,6 +55,7 @@ export interface JobStatusResponse {
     failed: number;
     percent: string;
   };
+  error?: string;
 }
 
 export interface HealthCheckResponse {
@@ -83,6 +83,11 @@ export const apiService = {
     return response.data;
   },
 
+  // Stop job
+  async stopJob(taskId: string): Promise<void> {
+    await api.post(`/scrape/stop/${taskId}`);
+  },
+
   // Get all jobs (if we implement this endpoint later)
   async getAllJobs(): Promise<any[]> {
     try {
@@ -92,15 +97,6 @@ export const apiService = {
       // If endpoint doesn't exist yet, return empty array
       console.warn('Jobs endpoint not available yet');
       return [];
-    }
-  },
-
-  // Cancel job (if we implement this endpoint later)
-  async cancelJob(taskId: string): Promise<void> {
-    try {
-      await api.delete(`/scrape/${taskId}`);
-    } catch (error) {
-      console.warn('Cancel job endpoint not available yet');
     }
   },
 

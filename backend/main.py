@@ -39,7 +39,7 @@ database.init_db()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Permite todos los orígenes (cuidado en producción)
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],  # Permite todos los métodos (GET, POST, etc.)
     allow_headers=["*"],  # Permite todas las cabeceras
 )
