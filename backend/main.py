@@ -193,6 +193,13 @@ async def create_scraping_job(req: ScrapeRequest):
     if not req.domains:
         raise HTTPException(status_code=400, detail="La lista de dominios no puede estar vacía.")
     task = start_scraping_task.delay(req.domains)
+
+    # Registrar inmediatamente el job en la base de datos para que el
+    # frontend pueda consultar su estado sin esperar a que Celery descubra
+    # las URLs. El número total y la lista de URLs se actualizarán una vez que
+    # la tarea principal haya terminado la fase de descubrimiento.
+    database.create_job(task.id, status="PENDING")
+
     return {"message": "Trabajo de scraping iniciado", "task_id": task.id}
 
 

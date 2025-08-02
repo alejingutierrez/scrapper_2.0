@@ -35,10 +35,30 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
 
-def create_job(job_id: str, total: int, urls: List[str]) -> None:
-    """Create or update a job entry with the initial set of URLs."""
+def create_job(
+    job_id: str,
+    total: int = 0,
+    urls: Optional[List[str]] = None,
+    status: str = "RUNNING",
+) -> None:
+    """Create or update a job entry.
+
+    Parameters
+    ----------
+    job_id:
+        Identifier of the job.
+    total:
+        Total number of URLs that will be processed. Defaults to ``0`` so a
+        job can be created before the discovery phase finishes.
+    urls:
+        Optional list of URLs discovered for this job.
+    status:
+        Initial status for the job. By default jobs start in ``RUNNING`` but a
+        caller may pass ``"PENDING"`` to register the job before any work has
+        begun.
+    """
     with SessionLocal() as session:
-        job = Job(id=job_id, total_urls=total, status="RUNNING", urls=urls)
+        job = Job(id=job_id, total_urls=total, status=status, urls=urls)
         session.merge(job)
         session.commit()
 
