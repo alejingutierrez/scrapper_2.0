@@ -192,7 +192,13 @@ def read_root():
 async def create_scraping_job(req: ScrapeRequest):
     if not req.domains:
         raise HTTPException(status_code=400, detail="La lista de dominios no puede estar vacía.")
-    task = start_scraping_task.delay(req.domains)
+    try:
+        task = start_scraping_task.delay(req.domains)
+    except Exception as exc:  # pragma: no cover - depende del entorno externo
+        logging.exception("No se pudo encolar la tarea de scraping: %s", exc)
+        raise HTTPException(
+            status_code=503, detail="Scraping service unavailable"
+        ) from exc
 
     # Registrar inmediatamente el job en la base de datos para que el
     # frontend pueda consultar su estado sin esperar a que Celery descubra
