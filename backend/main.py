@@ -10,7 +10,7 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from celery import Celery, group
+from celery import Celery, group, chord
 from pydantic import BaseModel
 from playwright.async_api import async_playwright
 
@@ -84,9 +84,25 @@ async def scrape_single_url(task_self, job_id: str, url: str):
             await pw_browser.close()
             return {"url": url, "status": "success", "data": product_data['title']}
     except Exception as e:
-        logging.error(f"[URL Task] Falla catastrófica en {url}: {e}")
+        logging.exception(f"[URL Task] Falla catastrófica en {url}: {e}")
         task_self.update_state(state='FAILURE', meta=str(e))
         raise
+
+
+@celery_app.task(name="finalize_scraping_task", bind=True)
+def finalize_scraping_task(self, results, job_id: str):
+    """Tarea que se ejecuta al finalizar todas las subtareas."""
+    total = len(results)
+    success = sum(1 for r in results if r and r.get("status") == "success")
+    database.update_job_status(job_id, "COMPLETED")
+    logging.info(
+        f"[Finalize] Job {job_id} completado. {success}/{total} URLs procesadas exitosamente."
+    )
+    return {
+        "status": "Completed",
+        "total_urls_processed": total,
+        "products_found": success,
+    }
 
 @celery_app.task(name="start_scraping_task", bind=True)
 def start_scraping_task(self, domains: list[str]):
@@ -99,38 +115,55 @@ async def orchestrate_scraping(task_self, domains: list[str]):
     """Lógica de orquestación asíncrona para el scraping."""
     logging.info(f"[Main Task] Descubriendo URLs para: {domains}")
     
-    url_lists = await asyncio.gather(*[crawler.get_urls_for_domain(domain) for domain in domains])
-    all_urls = [url for sublist in url_lists for url in sublist]
+    try:
+        url_lists = await asyncio.gather(
+            *[crawler.get_urls_for_domain(domain) for domain in domains]
+        )
+        all_urls = [url for sublist in url_lists for url in sublist]
 
-    if not all_urls:
-        logging.warning("[Main Task] No se encontraron URLs para procesar.")
-        task_self.update_state(state='SUCCESS', meta={'status': 'No URLs found'})
-        return {'status': 'No URLs found', 'total': 0}
+        if not all_urls:
+            logging.warning("[Main Task] No se encontraron URLs para procesar.")
+            task_self.update_state(state="SUCCESS", meta={"status": "No URLs found"})
+            return {"status": "No URLs found", "total": 0}
 
-    total_urls = len(all_urls)
-    job_id = task_self.request.id
-    database.create_job(job_id, total_urls, all_urls)
+        total_urls = len(all_urls)
+        job_id = task_self.request.id
+        database.create_job(job_id, total_urls, all_urls)
 
-    task_self.update_state(state='PROGRESS', meta={'total': total_urls, 'status': 'Descubriendo URLs...'})
-    logging.info(f"Se descubrieron {total_urls} URLs para los dominios: {domains}")
+        task_self.update_state(
+            state="PROGRESS",
+            meta={"total": total_urls, "status": "Descubriendo URLs..."},
+        )
+        logging.info(
+            f"Se descubrieron {total_urls} URLs para los dominios: {domains}"
+        )
 
-    if all_urls:
-        tasks_group = group(process_url_task.s(job_id, url) for url in all_urls)
-        result_group = tasks_group.apply_async()
-        database.update_job_group(job_id, result_group.id)
+        task_chord = chord(
+            process_url_task.s(job_id, url) for url in all_urls
+        )(finalize_scraping_task.s(job_id))
+        database.update_job_group(job_id, task_chord.id)
 
-        task_self.update_state(state='PROGRESS', meta={'task_group_id': result_group.id, 'total': total_urls, 'status': 'Procesando URLs...'})
-        logging.info(f"Grupo de tareas {result_group.id} lanzado.")
+        task_self.update_state(
+            state="PROGRESS",
+            meta={
+                "task_group_id": task_chord.id,
+                "total": total_urls,
+                "status": "Procesando URLs...",
+            },
+        )
+        logging.info(f"Grupo de tareas {task_chord.id} lanzado.")
 
-        completed_results = result_group.get()
-        database.update_job_status(job_id, "COMPLETED")
-
-        final_results = [res for res in completed_results if res and res.get('status') == 'success']
-
-        return {'status': 'Completed', 'total_urls_processed': total_urls, 'products_found': len(final_results)}
-    else:
-        logging.warning("No se encontraron URLs para procesar.")
-        return {'status': 'Completed', 'total_urls_processed': 0, 'products_found': 0}
+        return {
+            "status": "Started",
+            "total_urls": total_urls,
+            "task_group_id": task_chord.id,
+        }
+    except Exception as e:
+        job_id = task_self.request.id
+        logging.exception("[Main Task] Error durante la orquestación")
+        database.update_job_status(job_id, "FAILED")
+        task_self.update_state(state="FAILURE", meta={"error": str(e)})
+        raise
 
 # --- Endpoints de la API ---
 
@@ -165,6 +198,11 @@ async def get_scraping_status(task_id: str):
     completed = success + failed
     percent = (completed / job.total_urls * 100) if job.total_urls else 0
 
+    error_detail = None
+    if job.status == "FAILED":
+        async_result = celery_app.AsyncResult(task_id)
+        error_detail = str(async_result.info)
+
     return {
         "task_id": task_id,
         "status": job.status,
@@ -175,6 +213,7 @@ async def get_scraping_status(task_id: str):
             "failed": failed,
             "percent": f"{percent:.2f}%",
         },
+        "error": error_detail,
     }
 
 
