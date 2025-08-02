@@ -27,7 +27,21 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    command: celery -A backend.main.celery_app worker --loglevel=info -P solo
+    command: celery -A backend.main.celery_app worker --loglevel=info -c 4
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    networks:
+      - scraper-network
+
+  worker2:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: celery -A backend.main.celery_app worker --loglevel=info -c 4
     volumes:
       - .:/app
     depends_on:

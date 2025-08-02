@@ -4,9 +4,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const jobStatus = document.getElementById('job-status');
     const progressBar = document.getElementById('progress-bar');
     const progressText = document.getElementById('progress-text');
+    const pauseBtn = document.getElementById('pause-btn');
+    const resumeBtn = document.getElementById('resume-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const downloadBtn = document.getElementById('download-btn');
+    const resultsBody = document.querySelector('#results-table tbody');
 
     const API_BASE_URL = ''; // Las peticiones serán relativas al host actual
     let intervalId = null;
+    let currentTaskId = null;
 
     startBtn.addEventListener('click', async () => {
         const domains = domainsInput.value.trim().split('\n').filter(d => d);
@@ -34,16 +40,57 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await response.json();
-            const taskId = data.task_id;
-            jobStatus.textContent = `Trabajo en progreso (ID: ${taskId})`;
-            
+            currentTaskId = data.task_id;
+            jobStatus.textContent = `Trabajo en progreso (ID: ${currentTaskId})`;
+            pauseBtn.disabled = false;
+            stopBtn.disabled = false;
+            downloadBtn.disabled = false;
+
             // Empezar a consultar el estado
-            intervalId = setInterval(() => checkStatus(taskId), 2000);
+            intervalId = setInterval(() => checkStatus(currentTaskId), 2000);
 
         } catch (error) {
             jobStatus.textContent = `Error al iniciar: ${error.message}`;
             startBtn.disabled = false;
         }
+    });
+
+    pauseBtn.addEventListener('click', async () => {
+        if (!currentTaskId) return;
+        await fetch(`${API_BASE_URL}/scrape/pause/${currentTaskId}`, { method: 'POST' });
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = false;
+    });
+
+    resumeBtn.addEventListener('click', async () => {
+        if (!currentTaskId) return;
+        await fetch(`${API_BASE_URL}/scrape/resume/${currentTaskId}`, { method: 'POST' });
+        pauseBtn.disabled = false;
+        resumeBtn.disabled = true;
+        intervalId = setInterval(() => checkStatus(currentTaskId), 2000);
+    });
+
+    stopBtn.addEventListener('click', async () => {
+        if (!currentTaskId) return;
+        await fetch(`${API_BASE_URL}/scrape/stop/${currentTaskId}`, { method: 'POST' });
+        clearInterval(intervalId);
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = true;
+        stopBtn.disabled = true;
+    });
+
+    downloadBtn.addEventListener('click', async () => {
+        if (!currentTaskId) return;
+        const response = await fetch(`${API_BASE_URL}/scrape/download/${currentTaskId}`);
+        const data = await response.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentTaskId}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
     });
 
     async function checkStatus(taskId) {
@@ -56,12 +103,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             jobStatus.textContent = `Estado del trabajo: ${data.status}`;
+            if (data.status === 'PAUSED') {
+                pauseBtn.disabled = true;
+                resumeBtn.disabled = false;
+            }
 
             if (data.progress) {
                 const { total, completed, success, failed, percent } = data.progress;
                 progressBar.style.width = percent;
                 progressText.textContent = `${completed} de ${total} URLs procesadas (${percent})`;
-                
+
                 progressDetails.style.display = 'block';
                 progressDetails.innerHTML = `
                     <span>Total: <strong>${total}</strong></span>
@@ -71,15 +122,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             }
 
-            if (data.status === 'SUCCESS' || data.status === 'FAILURE') {
+            // actualizar tabla de resultados
+            const res = await fetch(`${API_BASE_URL}/scrape/results/${taskId}`);
+            const resData = await res.json();
+            resultsBody.innerHTML = '';
+            resData.results.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${r.url}</td><td>${r.status}</td>`;
+                resultsBody.appendChild(tr);
+            });
+
+            if (['SUCCESS', 'FAILURE', 'COMPLETED', 'CANCELLED'].includes(data.status)) {
                 clearInterval(intervalId);
                 startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                resumeBtn.disabled = true;
+                stopBtn.disabled = true;
                 jobStatus.textContent = `Trabajo finalizado con estado: ${data.status}`;
-                if (data.status === 'SUCCESS') {
-                    progressBar.style.backgroundColor = '#28a745';
-                } else {
-                    progressBar.style.backgroundColor = '#dc3545';
-                }
             }
 
         } catch (error) {
