@@ -4,7 +4,7 @@ import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 export interface ScrapingJob {
   id: string;
   domains: string[];
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress?: {
     total: number;
     completed: number;
@@ -15,6 +15,7 @@ export interface ScrapingJob {
   startTime: Date;
   endTime?: Date;
   results?: any[];
+  error?: string;
 }
 
 export interface ScrapingState {
@@ -40,6 +41,8 @@ type ScrapingAction =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ScrapingState['settings']> }
+  | { type: 'STOP_JOB'; payload: { id: string } }
+  | { type: 'SET_JOB_ERROR'; payload: { id: string; error: string } }
   | { type: 'CLEAR_JOBS' };
 
 // Initial state
@@ -104,7 +107,7 @@ function scrapingReducer(state: ScrapingState, action: ScrapingAction): Scraping
         ...state,
         jobs: state.jobs.map(job =>
           job.id === action.payload.id
-            ? { ...job, status: 'failed', endTime: new Date() }
+            ? { ...job, status: 'failed', endTime: new Date(), error: action.payload.error }
             : job
         ),
         activeJob: state.activeJob?.id === action.payload.id ? null : state.activeJob,
@@ -129,6 +132,31 @@ function scrapingReducer(state: ScrapingState, action: ScrapingAction): Scraping
 
     case 'CLEAR_JOBS':
       return { ...state, jobs: [], activeJob: null };
+
+    case 'STOP_JOB':
+      return {
+        ...state,
+        jobs: state.jobs.map(job =>
+          job.id === action.payload.id
+            ? { ...job, status: 'cancelled', endTime: new Date() }
+            : job
+        ),
+        activeJob: state.activeJob?.id === action.payload.id ? null : state.activeJob,
+        isLoading: false,
+      };
+
+    case 'SET_JOB_ERROR':
+      return {
+        ...state,
+        jobs: state.jobs.map(job =>
+          job.id === action.payload.id
+            ? { ...job, error: action.payload.error }
+            : job
+        ),
+        activeJob: state.activeJob?.id === action.payload.id
+          ? { ...state.activeJob, error: action.payload.error }
+          : state.activeJob,
+      };
 
     default:
       return state;

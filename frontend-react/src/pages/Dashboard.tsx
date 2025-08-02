@@ -68,6 +68,20 @@ const Dashboard: React.FC = () => {
     },
   });
 
+  const stopJobMutation = useMutation({
+    mutationFn: apiService.stopJob,
+    onSuccess: (_data, taskId) => {
+      dispatch({ type: 'STOP_JOB', payload: { id: taskId } });
+      if (pollingInterval) clearInterval(pollingInterval);
+    },
+    onError: (error: any) => {
+      dispatch({
+        type: 'SET_ERROR',
+        payload: error.response?.data?.detail || 'Failed to stop job',
+      });
+    },
+  });
+
   // Polling function for job status
   const startPolling = (taskId: string) => {
     if (pollingInterval) clearInterval(pollingInterval);
@@ -75,7 +89,7 @@ const Dashboard: React.FC = () => {
     const interval = setInterval(async () => {
       try {
         const status = await apiService.getJobStatus(taskId);
-        
+
         dispatch({
           type: 'UPDATE_JOB_PROGRESS',
           payload: {
@@ -83,23 +97,27 @@ const Dashboard: React.FC = () => {
             progress: status.progress,
           },
         });
-
-        if (status.status === 'SUCCESS' || status.status === 'FAILURE') {
+        if (status.status === 'COMPLETED' || status.status === 'FAILED' || status.status === 'CANCELLED') {
           clearInterval(interval);
-          if (status.status === 'SUCCESS') {
+          if (status.status === 'COMPLETED') {
             dispatch({
               type: 'COMPLETE_JOB',
               payload: { id: taskId },
             });
-          } else {
+          } else if (status.status === 'FAILED') {
             dispatch({
               type: 'FAIL_JOB',
-              payload: { id: taskId, error: 'Job failed' },
+              payload: { id: taskId, error: status.error || 'Job failed' },
             });
+          } else {
+            dispatch({ type: 'STOP_JOB', payload: { id: taskId } });
           }
         }
-      } catch (error) {
+      } catch (error: any) {
+        const message = error.response?.data?.detail || error.message || 'Polling error';
         console.error('Polling error:', error);
+        dispatch({ type: 'SET_JOB_ERROR', payload: { id: taskId, error: message } });
+        dispatch({ type: 'SET_ERROR', payload: message });
       }
     }, 2000);
 
@@ -121,6 +139,12 @@ const Dashboard: React.FC = () => {
     }
 
     startScrapingMutation.mutate({ domains: domainList });
+  };
+
+  const handleStopJob = () => {
+    if (state.activeJob) {
+      stopJobMutation.mutate(state.activeJob.id);
+    }
   };
 
   // Calculate metrics
@@ -304,6 +328,11 @@ const Dashboard: React.FC = () => {
             <Typography variant="h6" gutterBottom>
               Active Job: {state.activeJob.id}
             </Typography>
+            {state.activeJob.error && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {state.activeJob.error}
+              </Alert>
+            )}
             <Box sx={{ mb: 2 }}>
               {state.activeJob.domains.map((domain, index) => (
                 <Chip
@@ -343,6 +372,17 @@ const Dashboard: React.FC = () => {
                 </Box>
               </Box>
             )}
+            <Box sx={{ mt: 2 }}>
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={<StopIcon />}
+                onClick={handleStopJob}
+                disabled={stopJobMutation.isPending}
+              >
+                {stopJobMutation.isPending ? 'Stopping...' : 'Stop Job'}
+              </Button>
+            </Box>
           </CardContent>
         </Card>
       )}
@@ -354,30 +394,32 @@ const Dashboard: React.FC = () => {
             Recent Jobs
           </Typography>
           <List>
-            {state.jobs.slice(0, 5).map((job, index) => (
-              <React.Fragment key={job.id}>
-                <ListItem>
-                  <ListItemIcon>
+              {state.jobs.slice(0, 5).map((job, index) => (
+                <React.Fragment key={job.id}>
+                  <ListItem>
+                    <ListItemIcon>
                     {job.status === 'running' && <TimerIcon color="warning" />}
                     {job.status === 'completed' && <CheckIcon color="success" />}
                     {job.status === 'failed' && <ErrorIcon color="error" />}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={`Job ${job.id.slice(0, 8)}...`}
-                    secondary={`${job.domains.length} domains • ${job.status} • ${job.startTime.toLocaleString()}`}
-                  />
-                  <Chip
-                    label={job.status}
-                    color={
-                      job.status === 'completed' ? 'success' :
-                      job.status === 'running' ? 'warning' : 'error'
-                    }
-                    size="small"
-                  />
-                </ListItem>
-                {index < 4 && <Divider />}
-              </React.Fragment>
-            ))}
+                    {job.status === 'cancelled' && <StopIcon color="error" />}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={`Job ${job.id.slice(0, 8)}...`}
+                      secondary={`${job.domains.length} domains • ${job.status} • ${job.startTime.toLocaleString()}${job.error ? ' • Error: ' + job.error : ''}`}
+                    />
+                    <Chip
+                      label={job.status}
+                      color={
+                        job.status === 'completed' ? 'success' :
+                        job.status === 'running' ? 'warning' :
+                        job.status === 'cancelled' ? 'default' : 'error'
+                      }
+                      size="small"
+                    />
+                  </ListItem>
+                  {index < 4 && <Divider />}
+                </React.Fragment>
+              ))}
             {state.jobs.length === 0 && (
               <ListItem>
                 <ListItemText
