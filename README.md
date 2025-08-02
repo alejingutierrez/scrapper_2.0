@@ -60,7 +60,8 @@ Esta aplicación permite extraer información de productos desde múltiples siti
 5.  **Abrir el frontend:**
     Abre el archivo `frontend/index.html` en tu navegador.
 
-Los datos extraídos se guardan tanto en `results.jsonl` como en la base de datos SQLite `scraper.db` (o la ruta especificada en la variable de entorno `SCRAPER_DB`) para mantener un registro persistente de todos los productos procesados.
+Los datos extraídos se guardan tanto en `results.jsonl` como en la base de datos SQLite `scraper.db` (o la ruta especificada en la variable de entorno `SCRAPER_DB`).
+La base de datos almacena cada trabajo de scraping y sus resultados asociados, lo que permite consultar los datos por `task_id` mediante el endpoint `/scrape/results/{task_id}`.
 
 ## Seguimiento de progreso
 
