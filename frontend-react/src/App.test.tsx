@@ -1,9 +1,10 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
+jest.mock('./services/api', () => ({ apiService: { healthCheck: jest.fn() } }));
 
-test('renders learn react link', () => {
+test('renders scraper dashboard', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  const heading = screen.getByText(/Web Scraper Dashboard/i);
+  expect(heading).toBeInTheDocument();
 });

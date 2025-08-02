@@ -1,14 +1,10 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Box } from '@mui/material';
 import Navbar from './components/Navbar';
-import Dashboard from './pages/Dashboard';
-import ScrapingJobs from './pages/ScrapingJobs';
-import Analytics from './pages/Analytics';
-import Settings from './pages/Settings';
 import { ScrapingProvider } from './context/ScrapingContext';
+import UnifiedScraperPage from './pages/UnifiedScraperPage';
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -78,19 +74,12 @@ function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <ScrapingProvider>
-          <Router>
-            <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-              <Navbar />
-              <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/jobs" element={<ScrapingJobs />} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Routes>
-              </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+            <Navbar />
+            <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+              <UnifiedScraperPage />
             </Box>
-          </Router>
+          </Box>
         </ScrapingProvider>
       </ThemeProvider>
     </QueryClientProvider>
