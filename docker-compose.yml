@@ -28,7 +28,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     command: >-
-      celery -A backend.main.celery_app worker --loglevel=info -c ${WORKER_CONCURRENCY:-5}
+      celery -A backend.main.celery_app worker --loglevel=info -c ${WORKER_CONCURRENCY:-3}
     volumes:
       - .:/app
     depends_on:

@@ -36,8 +36,13 @@ celery_app.conf.update(
 app = FastAPI(title="Scraper API", version="1.0.0")
 database.init_db()
 
-WORKERS_PER_JOB = int(os.getenv("WORKERS_PER_JOB", "5"))
-WORKER_CONTAINER_CONCURRENCY = int(os.getenv("WORKER_CONCURRENCY", "5"))
+# Cada trabajo de scraping requiere tres procesos de worker por defecto. De este
+# modo se puede ajustar con variables de entorno en despliegues diferentes, pero
+# si no se especifica se garantizan tres workers por job como mínimo.
+WORKERS_PER_JOB = int(os.getenv("WORKERS_PER_JOB", "3"))
+# Cada contenedor de worker ejecuta también tres procesos de Celery por defecto
+# para que el número total de procesos coincida con el multiplicador anterior.
+WORKER_CONTAINER_CONCURRENCY = int(os.getenv("WORKER_CONCURRENCY", "3"))
 
 
 def scale_worker_containers() -> None:
