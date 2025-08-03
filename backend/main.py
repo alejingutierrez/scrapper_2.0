@@ -68,6 +68,8 @@ def scale_worker_containers() -> None:
                 "up",
                 "--scale",
                 f"worker={target_containers}",
+                "--force-recreate",
+                "--remove-orphans",
                 "-d",
             ],
             check=True,

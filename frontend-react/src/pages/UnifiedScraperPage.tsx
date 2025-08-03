@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -36,6 +36,15 @@ export const UnifiedScraperPage: React.FC = () => {
   const [results, setResults] = useState<any[]>([]);
   const [page, setPage] = useState(0);
   const rowsPerPage = 10;
+  const dataKeys = useMemo(() => {
+    const keys = new Set<string>();
+    results.forEach((r) => {
+      if (r.data && typeof r.data === 'object') {
+        Object.keys(r.data).forEach((k) => keys.add(k));
+      }
+    });
+    return Array.from(keys);
+  }, [results]);
 
   // Start scraping for each URL entered
   const handleStart = async () => {
@@ -160,48 +169,46 @@ export const UnifiedScraperPage: React.FC = () => {
           )}
         </Box>
       ))}
-      {results.length > 0 && (
-        <TableContainer component={Paper} sx={{ mt: 4 }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Job</TableCell>
-                <TableCell>URL</TableCell>
-                <TableCell>Data</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {results
-                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                .map((row, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell>{row.job_id}</TableCell>
-                    <TableCell>{row.url || row.product_url || 'n/a'}</TableCell>
-                    <TableCell sx={{ whiteSpace: 'pre-wrap', maxWidth: 400 }}>
-                      {row.data ? (
-                        <pre style={{ margin: 0 }}>
-                          {JSON.stringify(row.data, null, 2)}
-                        </pre>
-                      ) : (
-                        JSON.stringify(row)
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-          <TablePagination
-            component="div"
-            count={results.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={(_e, newPage) => setPage(newPage)}
-            rowsPerPageOptions={[rowsPerPage]}
-          />
-        </TableContainer>
-      )}
-    </Box>
-  );
-};
+        {results.length > 0 && (
+          <TableContainer component={Paper} sx={{ mt: 4 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Job</TableCell>
+                  <TableCell>URL</TableCell>
+                  {dataKeys.map((k) => (
+                    <TableCell key={k}>{k}</TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {results
+                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                  .map((row, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>{row.job_id}</TableCell>
+                      <TableCell>{row.url || row.product_url || 'n/a'}</TableCell>
+                      {dataKeys.map((k) => (
+                        <TableCell key={k} sx={{ maxWidth: 400 }}>
+                          {row.data && row.data[k] !== undefined ? String(row.data[k]) : ''}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+            <TablePagination
+              component="div"
+              count={results.length}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={(_e, newPage) => setPage(newPage)}
+              rowsPerPageOptions={[rowsPerPage]}
+            />
+          </TableContainer>
+        )}
+      </Box>
+    );
+  };
 
 export default UnifiedScraperPage;
