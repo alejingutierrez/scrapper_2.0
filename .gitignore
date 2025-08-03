@@ -2,3 +2,5 @@
 __pycache__/
 *.py[cod]
 scraper.db
+node_modules/
+frontend-react/build

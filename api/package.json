@@ -1,0 +1,8 @@
+{
+  "name": "api",
+  "type": "module",
+  "dependencies": {
+    "@vercel/blob": "^1.1.1",
+    "@vercel/edge-config": "^1.4.0"
+  }
+}

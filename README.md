@@ -70,3 +70,34 @@ Al iniciar un trabajo, el backend calcula primero cuántas URLs se van a procesa
 ## Escalado dinámico de workers
 
 Cuando se ejecuta con Docker Compose, el backend ajusta automáticamente la cantidad de contenedores `worker` para mantener cinco procesos por cada trabajo activo. Al finalizar o cancelar un trabajo, los contenedores sobrantes se detienen, liberando recursos sin intervención manual.
+
+## Despliegue en Vercel
+
+El proyecto incluye configuración para desplegar el frontend de React y funciones serverless en [Vercel](https://vercel.com).
+
+1. **Variables de entorno**
+   - `OPENAI_API_KEY`: clave de OpenAI.
+   - `SCRAPER_DB`: ruta a la base de datos (opcional).
+   - `BLOB_READ_WRITE_TOKEN`: token de lectura/escritura para Vercel Blob.
+   - `EDGE_CONFIG`: cadena de conexión de Edge Config.
+
+   Puedes copiar `.env.example` a `.env` y completar los valores. Luego sincroniza con Vercel:
+   ```bash
+   vercel env pull
+   ```
+
+2. **Instalar dependencias de las funciones**
+   ```bash
+   npm --prefix api install
+   ```
+
+3. **Desplegar**
+   ```bash
+   vercel deploy
+   ```
+
+Las funciones disponibles son:
+
+- `api/upload.js`: permite subir contenidos a [Vercel Blob](https://vercel.com/docs/storage/vercel-blob).
+- `api/welcome.js`: lee valores de [Edge Config](https://vercel.com/docs/storage/edge-config).
+
