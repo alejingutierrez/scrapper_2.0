@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Cargar variables de entorno ANTES de cualquier otra importación del proyecto
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from celery import Celery, group, chord
@@ -105,14 +105,14 @@ async def add_cors_headers(request: Request, call_next):
     response.headers.setdefault("Access-Control-Allow-Methods", "*")
     return response
 
-
-@app.get("/", summary="Health check")
-async def read_root():
-    """Simple health check endpoint for monitoring purposes."""
-    return {"status": "ok", "message": "Scraper API is running"}
-
 class ScrapeRequest(BaseModel):
     domains: list[str]
+
+# The API endpoints are registered on an ``APIRouter`` which is mounted twice:
+# at the application root (``/``) and under the ``/api`` prefix.  This allows
+# the React frontend (which uses ``/api`` in production) and the unit tests
+# (which call endpoints directly) to access the same handlers.
+router = APIRouter()
 
 # --- Tareas de Celery ---
 
@@ -236,11 +236,11 @@ async def orchestrate_scraping(task_self, domains: list[str]):
 
 # --- Endpoints de la API ---
 
-@app.get("/", summary="Endpoint de prueba")
+@router.get("/", summary="Endpoint de prueba")
 def read_root():
     return {"status": "ok", "message": "Bienvenido a la API de Scraper 2.0"}
 
-@app.post("/scrape", summary="Iniciar un nuevo trabajo de scraping", status_code=202)
+@router.post("/scrape", summary="Iniciar un nuevo trabajo de scraping", status_code=202)
 async def create_scraping_job(req: ScrapeRequest):
     if not req.domains:
         raise HTTPException(status_code=400, detail="La lista de dominios no puede estar vacía.")
@@ -261,14 +261,14 @@ async def create_scraping_job(req: ScrapeRequest):
     return {"message": "Trabajo de scraping iniciado", "task_id": task.id}
 
 
-@app.get("/scrape/results/{task_id}", summary="Obtener resultados de un trabajo")
+@router.get("/scrape/results/{task_id}", summary="Obtener resultados de un trabajo")
 async def get_scraping_results(task_id: str):
     if not database.job_exists(task_id):
         raise HTTPException(status_code=404, detail="Job not found")
     results = database.get_results_by_job(task_id)
     return {"task_id": task_id, "results": results}
 
-@app.get("/scrape/status/{task_id}", summary="Consultar estado de un trabajo")
+@router.get("/scrape/status/{task_id}", summary="Consultar estado de un trabajo")
 async def get_scraping_status(task_id: str):
     job = database.get_job(task_id)
     if not job:
@@ -303,7 +303,7 @@ async def get_scraping_status(task_id: str):
     }
 
 
-@app.post("/scrape/pause/{task_id}", summary="Pausar un trabajo en ejecución")
+@router.post("/scrape/pause/{task_id}", summary="Pausar un trabajo en ejecución")
 async def pause_job(task_id: str):
     job = database.get_job(task_id)
     if not job or job["status"] != "RUNNING":
@@ -318,7 +318,7 @@ async def pause_job(task_id: str):
     return {"status": "paused"}
 
 
-@app.post("/scrape/resume/{task_id}", summary="Reanudar un trabajo pausado")
+@router.post("/scrape/resume/{task_id}", summary="Reanudar un trabajo pausado")
 async def resume_job(task_id: str):
     job = database.get_job(task_id)
     if not job or job["status"] != "PAUSED":
@@ -336,7 +336,7 @@ async def resume_job(task_id: str):
     return {"status": "resumed", "pending": len(pending)}
 
 
-@app.post("/scrape/stop/{task_id}", summary="Cancelar un trabajo")
+@router.post("/scrape/stop/{task_id}", summary="Cancelar un trabajo")
 async def stop_job(task_id: str):
     job = database.get_job(task_id)
     if not job:
@@ -351,7 +351,7 @@ async def stop_job(task_id: str):
     return {"status": "cancelled"}
 
 
-@app.delete("/scrape/{task_id}", summary="Eliminar un trabajo y sus resultados")
+@router.delete("/scrape/{task_id}", summary="Eliminar un trabajo y sus resultados")
 async def delete_job(task_id: str):
     if not database.job_exists(task_id):
         raise HTTPException(status_code=404, detail="Job not found")
@@ -359,9 +359,16 @@ async def delete_job(task_id: str):
     return {"status": "deleted"}
 
 
-@app.get("/scrape/download/{task_id}", summary="Descargar resultados de un trabajo")
+@router.get("/scrape/download/{task_id}", summary="Descargar resultados de un trabajo")
 async def download_results(task_id: str):
     if not database.job_exists(task_id):
         raise HTTPException(status_code=404, detail="Job not found")
     results = database.get_results_by_job(task_id)
     return JSONResponse(content=results)
+
+
+# Expose the same routes both at ``/`` and ``/api`` so that the frontend running
+# behind a reverse proxy can reach them while tests and local development keep
+# working against the root path.
+app.include_router(router)
+app.include_router(router, prefix="/api")
