@@ -105,6 +105,12 @@ async def add_cors_headers(request: Request, call_next):
     response.headers.setdefault("Access-Control-Allow-Methods", "*")
     return response
 
+
+@app.get("/", summary="Health check")
+async def read_root():
+    """Simple health check endpoint for monitoring purposes."""
+    return {"status": "ok", "message": "Scraper API is running"}
+
 class ScrapeRequest(BaseModel):
     domains: list[str]
 
