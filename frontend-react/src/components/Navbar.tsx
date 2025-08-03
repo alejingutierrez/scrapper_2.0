@@ -1,6 +1,6 @@
 import React from 'react';
 import { AppBar, Toolbar, Typography, Box, Chip, Tooltip } from '@mui/material';
-import { BugReport as BugIcon, PlayArrow as PlayIcon, Stop as StopIcon } from '@mui/icons-material';
+import { BugReport as BugIcon, PlayArrow as PlayIcon } from '@mui/icons-material';
 import { useScraping } from '../context/ScrapingContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiService } from '../services/api';

@@ -85,7 +85,7 @@ export const UnifiedScraperPage: React.FC = () => {
 
   // Poll results for a job
   const pollResults = (taskId: string) => {
-    const interval = setInterval(async () => {
+    setInterval(async () => {
       try {
         const res = await apiService.getJobResults(taskId);
         if (res && (res as any).results) {
