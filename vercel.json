@@ -3,7 +3,10 @@
   "buildCommand": "npm --prefix frontend-react run build",
   "outputDirectory": "frontend-react/build",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/api", "destination": "/api/index.js" },
+    { "source": "/api/(.*)", "destination": "/api/[...path].js?path=$1" },
+    { "source": "/static/(.*)", "destination": "/frontend-react/build/static/$1" },
+    { "source": "/manifest.json", "destination": "/frontend-react/build/manifest.json" },
     { "source": "/(.*)", "destination": "/frontend-react/build/index.html" }
   ]
 }
