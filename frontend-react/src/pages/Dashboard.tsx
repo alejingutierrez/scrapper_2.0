@@ -14,6 +14,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   List,
   ListItem,
@@ -446,6 +447,9 @@ const Dashboard: React.FC = () => {
       <Dialog open={newJobDialog} onClose={() => setNewJobDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Start New Scraping Job</DialogTitle>
         <DialogContent>
+          <DialogContentText>
+            Enter one domain per line to start a new scraping job.
+          </DialogContentText>
           <TextField
             autoFocus
             margin="dense"

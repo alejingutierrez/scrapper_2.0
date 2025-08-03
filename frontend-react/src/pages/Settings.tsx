@@ -21,6 +21,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
 } from '@mui/material';
 import {
@@ -443,10 +444,10 @@ const Settings: React.FC = () => {
       <Dialog open={resetDialog} onClose={() => setResetDialog(false)}>
         <DialogTitle>Reset Settings</DialogTitle>
         <DialogContent>
-          <Typography>
-            Are you sure you want to reset all settings to their default values? 
+          <DialogContentText>
+            Are you sure you want to reset all settings to their default values?
             This action cannot be undone.
-          </Typography>
+          </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setResetDialog(false)}>Cancel</Button>
