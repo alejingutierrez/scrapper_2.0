@@ -20,6 +20,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   LinearProgress,
   Tooltip,
@@ -325,6 +326,9 @@ const ScrapingJobs: React.FC = () => {
           Job Details: {selectedJob?.id.slice(0, 8)}...
         </DialogTitle>
         <DialogContent>
+          <DialogContentText>
+            Detailed information about the selected scraping job.
+          </DialogContentText>
           {selectedJob && (
             <Box sx={{ mt: 2 }}>
               <Box display="flex" flexWrap="wrap" gap={3}>
