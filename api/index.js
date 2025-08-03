@@ -1,6 +1,22 @@
-const BACKEND_URL = process.env.SCRAPER_API_URL || 'http://localhost:8000';
+// Determine backend URL. When running on Vercel the URL must be provided via
+// ``SCRAPER_API_URL``. For local development we fall back to the typical
+// ``localhost`` address so developers can run the backend separately without
+// extra configuration.
+const BACKEND_URL =
+  process.env.SCRAPER_API_URL ||
+  (process.env.VERCEL ? undefined : 'http://localhost:8000');
 
 export default async function handler(req, res) {
+  // If no backend URL is available (for instance on Vercel without the
+  // environment variable configured) return a friendly health‑check response
+  // instead of a 500 error.
+  if (!BACKEND_URL) {
+    res
+      .status(200)
+      .json({ status: 'ok', message: 'SCRAPER_API_URL not configured' });
+    return;
+  }
+
   const target = `${BACKEND_URL}/`;
 
   const init = {
@@ -25,6 +41,10 @@ export default async function handler(req, res) {
       res.send(text);
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    // When the backend is unreachable we still return HTTP 200 so the frontend
+    // can surface a clear message instead of failing the request entirely.
+    res
+      .status(200)
+      .json({ status: 'error', message: 'Unable to reach backend', detail: error.message });
   }
 }
