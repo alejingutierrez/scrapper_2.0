@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
-import { Box, Typography, TextField, Button, LinearProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import {
+  Box,
+  Typography,
+  TextField,
+  Button,
+  LinearProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  TablePagination,
+} from '@mui/material';
 import { apiService } from '../services/api';
 import * as XLSX from 'xlsx';
 
@@ -20,6 +34,8 @@ export const UnifiedScraperPage: React.FC = () => {
   const [urlInput, setUrlInput] = useState('');
   const [jobs, setJobs] = useState<JobInfo[]>([]);
   const [results, setResults] = useState<any[]>([]);
+  const [page, setPage] = useState(0);
+  const rowsPerPage = 10;
 
   // Start scraping for each URL entered
   const handleStart = async () => {
@@ -77,7 +93,14 @@ export const UnifiedScraperPage: React.FC = () => {
   };
 
   const handleDownload = () => {
-    const ws = XLSX.utils.json_to_sheet(results);
+    // Aplanar la estructura para que el Excel contenga columnas legibles
+    const flattened = results.map((r) => ({
+      job_id: r.job_id,
+      url: r.url || r.product_url || 'n/a',
+      status: r.status,
+      ...(r.data || {}),
+    }));
+    const ws = XLSX.utils.json_to_sheet(flattened);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Results');
     XLSX.writeFile(wb, 'scraper_results.xlsx');
@@ -148,15 +171,33 @@ export const UnifiedScraperPage: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {results.map((row, idx) => (
-                <TableRow key={idx}>
-                  <TableCell>{row.job_id}</TableCell>
-                  <TableCell>{row.url || row.product_url || 'n/a'}</TableCell>
-                  <TableCell>{row.title || JSON.stringify(row)}</TableCell>
-                </TableRow>
-              ))}
+              {results
+                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map((row, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>{row.job_id}</TableCell>
+                    <TableCell>{row.url || row.product_url || 'n/a'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'pre-wrap', maxWidth: 400 }}>
+                      {row.data ? (
+                        <pre style={{ margin: 0 }}>
+                          {JSON.stringify(row.data, null, 2)}
+                        </pre>
+                      ) : (
+                        JSON.stringify(row)
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
             </TableBody>
           </Table>
+          <TablePagination
+            component="div"
+            count={results.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={(_e, newPage) => setPage(newPage)}
+            rowsPerPageOptions={[rowsPerPage]}
+          />
         </TableContainer>
       )}
     </Box>
