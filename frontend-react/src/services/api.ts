@@ -72,7 +72,7 @@ export interface HealthCheckResponse {
 export const apiService = {
   // Health check
   async healthCheck(): Promise<HealthCheckResponse> {
-    const response = await api.get('/');
+    const response = await api.get('');
     return response.data;
   },
 
