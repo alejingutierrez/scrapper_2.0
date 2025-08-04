@@ -83,11 +83,16 @@ export const apiService = {
     // When the backend is not configured or returns an error, the proxy API
     // responds with an ``error``/``status`` field instead of the expected
     // ``task_id``. Surface this as a rejected promise so callers can handle it
-    // gracefully.
+    // gracefully.  Include extra diagnostic details (such as the original
+    // network error or the target URL) so the UI can present more actionable
+    // feedback when the backend is unreachable.
     if (!data?.task_id) {
-      throw new Error(
-        data?.message || data?.error || data?.detail || 'SCRAPER_API_URL not configured'
-      );
+      const baseMessage =
+        data?.message || data?.error || data?.detail || 'SCRAPER_API_URL not configured';
+      const extra = [data?.detail && data.detail !== baseMessage ? data.detail : undefined, data?.target]
+        .filter(Boolean)
+        .join(' - ');
+      throw new Error(extra ? `${baseMessage} (${extra})` : baseMessage);
     }
     return data;
   },
