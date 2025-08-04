@@ -12,6 +12,7 @@ def test_scale_worker_containers(monkeypatch, tmp_path):
     importlib.reload(main)
 
     database.create_job("job1", total=1, urls=["u"], status="RUNNING")
+    database.create_job("job2", total=1, urls=["u"], status="PENDING")
 
     calls = []
 
@@ -20,8 +21,9 @@ def test_scale_worker_containers(monkeypatch, tmp_path):
 
     monkeypatch.setattr(main.subprocess, "run", fake_run)
     main.scale_worker_containers()
-    assert calls[-1][4] == "worker=1"
+    assert calls[-1][4] == "worker=2"
 
     database.update_job_status("job1", "COMPLETED")
+    database.update_job_status("job2", "COMPLETED")
     main.scale_worker_containers()
     assert calls[-1][4] == "worker=0"
