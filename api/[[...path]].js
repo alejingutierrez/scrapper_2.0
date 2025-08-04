@@ -1,4 +1,7 @@
-import fetch from 'node-fetch';
+// Proxy function for the React frontend.  We rely on the runtime's built-in
+// ``fetch`` implementation (available in Node 18+) and implement a small retry
+// helper so transient network issues do not immediately bubble up as failures
+// in the UI.
 
 // ``SCRAPER_API_URL`` must be provided when running on Vercel. Locally we fall
 // back to the development server on ``localhost``.
@@ -40,8 +43,21 @@ export default async function handler(req, res) {
     init.headers['Content-Type'] = 'application/json';
   }
 
+  async function fetchWithRetry(url, options, retries = 2) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 10000);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } catch (err) {
+      if (retries <= 0) throw err;
+      return await fetchWithRetry(url, options, retries - 1);
+    } finally {
+      clearTimeout(id);
+    }
+  }
+
   try {
-    const response = await fetch(target, init);
+    const response = await fetchWithRetry(target, init);
     const contentType = response.headers.get('content-type') || '';
     res.status(response.status);
     if (contentType.includes('application/json')) {
@@ -56,6 +72,11 @@ export default async function handler(req, res) {
     // can surface a clear message instead of failing the request entirely.
     res
       .status(200)
-      .json({ status: 'error', message: 'Unable to reach backend', detail: error.message });
+      .json({
+        status: 'error',
+        message: 'Unable to reach backend',
+        detail: error.message,
+        target: target.toString(),
+      });
   }
 }
