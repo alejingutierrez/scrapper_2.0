@@ -1,3 +1,5 @@
+import fetch from 'node-fetch';
+
 // ``SCRAPER_API_URL`` must be provided when running on Vercel. Locally we fall
 // back to the development server on ``localhost``.
 const BACKEND_URL =
@@ -18,9 +20,17 @@ export default async function handler(req, res) {
 
   const target = `${BACKEND_URL}/${Array.isArray(path) ? path.join('/') : path}`;
 
+  const headers = { ...req.headers };
+  // Drop hop-by-hop headers which can cause ``fetch`` to reject the request or
+  // forward incorrect values to the backend service.  ``fetch`` will populate
+  // the right ``Host`` header based on the target URL.
+  delete headers.host;
+  delete headers.connection;
+  delete headers['content-length'];
+
   const init = {
     method: req.method,
-    headers: { ...req.headers, host: undefined },
+    headers,
   };
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
