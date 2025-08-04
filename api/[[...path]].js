@@ -7,8 +7,6 @@ const BACKEND_URL =
   (process.env.VERCEL ? undefined : 'http://localhost:8000');
 
 export default async function handler(req, res) {
-  const { path = [] } = req.query;
-
   if (!BACKEND_URL) {
     res.status(200).json({
       status: 'error',
@@ -18,7 +16,19 @@ export default async function handler(req, res) {
     return;
   }
 
-  const target = `${BACKEND_URL}/${Array.isArray(path) ? path.join('/') : path}`;
+  // Reconstruct target URL by stripping the ``/api`` prefix from the incoming
+  // path and preserving query parameters.
+  const reqUrl = new URL(req.url, 'http://localhost');
+  const target = new URL(reqUrl.pathname.replace(/^\/api/, '') + reqUrl.search, BACKEND_URL);
+
+  const headers = { ...req.headers };
+  // Drop hop-by-hop headers which can cause ``fetch`` to reject the request or
+  // forward incorrect values to the backend service.  ``fetch`` will populate
+  // the right ``Host`` header based on the target URL.
+  delete headers.host;
+  delete headers.connection;
+  delete headers['content-length'];
+  delete headers['accept-encoding'];
 
   const headers = { ...req.headers };
   // Drop hop-by-hop headers which can cause ``fetch`` to reject the request or

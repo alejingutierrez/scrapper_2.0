@@ -85,7 +85,9 @@ export const apiService = {
     // ``task_id``. Surface this as a rejected promise so callers can handle it
     // gracefully.
     if (!data?.task_id) {
-      throw new Error(data?.message || data?.error || 'SCRAPER_API_URL not configured');
+      throw new Error(
+        data?.message || data?.error || data?.detail || 'SCRAPER_API_URL not configured'
+      );
     }
     return data;
   },
