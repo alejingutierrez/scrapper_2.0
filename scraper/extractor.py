@@ -11,8 +11,17 @@ GPT_MODEL = "gpt-4o-mini"
 MAX_CONTENT_TOKENS = 118_000  # Margen de seguridad sobre el límite del modelo
 
 # Inicializar cliente de OpenAI de forma segura
-# La API key se carga automáticamente desde la variable de entorno OPENAI_API_KEY
-client = AsyncOpenAI()
+# Si la API key no está configurada no inicializamos el cliente para evitar
+# que la aplicación falle durante el arranque.
+client: AsyncOpenAI | None = None
+api_key = os.getenv("OPENAI_API_KEY")
+if api_key:
+    try:  # pragma: no cover - dependent on external service
+        client = AsyncOpenAI(api_key=api_key)
+    except Exception as exc:  # pragma: no cover - best effort
+        logging.warning("No se pudo inicializar el cliente de OpenAI: %s", exc)
+else:
+    logging.warning("OPENAI_API_KEY no configurada; la extracción se deshabilitará")
 
 # Inicializar codificador de tokens
 try:
@@ -178,21 +187,31 @@ async def extract_product_data_from_html(url: str, html: str) -> dict | None:
         return None
 
     messages = [
-        {"role": "system", "content": "Eres un experto en web scraping. Extraes datos de productos y respondes únicamente con un objeto JSON que se adhiere estrictamente al esquema proporcionado."},
-        {"role": "user", "content": f"Extrae la información del producto de la siguiente URL: {url}\n\nContenido de la página:\n---\n{truncated_text}"}
+        {
+            "role": "system",
+            "content": "Eres un experto en web scraping. Extraes datos de productos y respondes únicamente con un objeto JSON que se adhiere estrictamente al esquema proporcionado.",
+        },
+        {
+            "role": "user",
+            "content": f"Extrae la información del producto de la siguiente URL: {url}\n\nContenido de la página:\n---\n{truncated_text}",
+        },
     ]
 
-    try:
+    if not client:
+        logging.error("[Extractor] Cliente de OpenAI no configurado; omitiendo extracción")
+        return None
+
+    try:  # pragma: no cover - network call
         response = await client.chat.completions.create(
             model=GPT_MODEL,
             messages=messages,
-            temperature=0.2, # Temperatura baja para mayor consistencia
-            response_format={"type": "json_schema", "json_schema": PRODUCT_SCHEMA}
+            temperature=0.2,  # Temperatura baja para mayor consistencia
+            response_format={"type": "json_schema", "json_schema": PRODUCT_SCHEMA},
         )
         extracted_data = json.loads(response.choices[0].message.content)
-        extracted_data['url'] = url # Añadir la URL original para trazabilidad
+        extracted_data['url'] = url  # Añadir la URL original para trazabilidad
         logging.info(f"[Extractor] Datos extraídos exitosamente de {url}")
         return extracted_data
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - best effort
         logging.error(f"[Extractor] Error en la llamada a GPT para {url}: {e}")
         return None

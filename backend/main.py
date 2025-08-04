@@ -244,6 +244,8 @@ def read_root():
 async def create_scraping_job(req: ScrapeRequest):
     if not req.domains:
         raise HTTPException(status_code=400, detail="La lista de dominios no puede estar vacía.")
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY not configured")
     try:
         task = start_scraping_task.delay(req.domains)
     except Exception as exc:  # pragma: no cover - depende del entorno externo
