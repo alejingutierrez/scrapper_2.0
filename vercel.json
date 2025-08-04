@@ -8,8 +8,6 @@
       "source": "/api/(.*)",
       "destination": "/api/[[...path]].js?path=$1"
     },
-    { "source": "/static/(.*)", "destination": "/frontend-react/build/static/$1" },
-    { "source": "/manifest.json", "destination": "/frontend-react/build/manifest.json" },
-    { "source": "/(.*)", "destination": "/frontend-react/build/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

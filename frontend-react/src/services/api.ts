@@ -79,7 +79,15 @@ export const apiService = {
   // Start scraping job
   async startScraping(request: StartScrapingRequest): Promise<StartScrapingResponse> {
     const response = await api.post('/scrape', request);
-    return response.data;
+    const data = response.data;
+    // When the backend is not configured or returns an error, the proxy API
+    // responds with an ``error``/``status`` field instead of the expected
+    // ``task_id``. Surface this as a rejected promise so callers can handle it
+    // gracefully.
+    if (!data?.task_id) {
+      throw new Error(data?.message || data?.error || 'SCRAPER_API_URL not configured');
+    }
+    return data;
   },
 
   // Get job status
