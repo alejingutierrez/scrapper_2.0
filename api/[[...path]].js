@@ -8,7 +8,9 @@ export default async function handler(req, res) {
   const { path = [] } = req.query;
 
   if (!BACKEND_URL) {
-    res.status(503).json({ error: 'SCRAPER_API_URL not configured' });
+    res
+      .status(200)
+      .json({ status: 'error', message: 'SCRAPER_API_URL not configured' });
     return;
   }
 
@@ -36,8 +38,10 @@ export default async function handler(req, res) {
       res.send(text);
     }
   } catch (error) {
+    // When the backend is unreachable we still return HTTP 200 so the frontend
+    // can surface a clear message instead of failing the request entirely.
     res
-      .status(502)
-      .json({ error: 'Unable to reach backend', detail: error.message });
+      .status(200)
+      .json({ status: 'error', message: 'Unable to reach backend', detail: error.message });
   }
 }
