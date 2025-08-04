@@ -1,12 +1,20 @@
 import axios from 'axios';
 
 // API Configuration
-// When developing locally we talk directly to the FastAPI backend running on
-// port 8000. In production (or when a specific URL is provided) we keep the
-// ``/api`` prefix so that requests can be proxied by Nginx/Vercel.
-const API_BASE_URL =
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : '/api');
+//
+// The frontend is served from various environments (local dev server, Codespaces,
+// Vercel preview/production, etc.).  Using ``process.env.NODE_ENV`` alone to
+// determine the backend URL is unreliable because non-local environments may
+// still run in ``development`` mode.  In those cases requests to
+// ``http://localhost:8000`` fail, producing errors such as "Unable to reach
+// backend".  Instead we fall back to the current window hostname to decide if we
+// should talk to a local backend or use the ``/api`` prefix that can be proxied
+// by Nginx/Vercel.
+const isLocalhost =
+  typeof window !== 'undefined' &&
+  ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || (isLocalhost ? 'http://localhost:8000' : '/api');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
