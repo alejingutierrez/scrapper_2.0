@@ -53,7 +53,7 @@ def scale_worker_containers() -> None:
     processes. Any error during scaling is logged but ignored to keep the
     scraping flow running even when Docker is unavailable (e.g. during tests).
     """
-    active_jobs = database.count_jobs_by_status("RUNNING")
+    active_jobs = database.count_jobs_by_status("RUNNING") + database.count_jobs_by_status("PENDING")
     required_workers = active_jobs * WORKERS_PER_JOB
     target_containers = (
         math.ceil(required_workers / WORKER_CONTAINER_CONCURRENCY)
@@ -131,25 +131,27 @@ async def scrape_single_url(task_self, job_id: str, url: str):
     try:
         async with async_playwright() as pw:
             pw_browser = await pw.chromium.launch(headless=True)
-            context = await pw_browser.new_context(user_agent=browser.HEADERS['User-Agent'])
+            context = await browser.create_context(pw_browser, proxy=os.getenv("SCRAPER_PROXY"))
+            try:
+                html = await browser.get_html_from_url(context, url)
+                if not html:
+                    storage.save_product(job_id, url, {"reason": "No se pudo obtener HTML"}, "failed")
+                    return {"url": url, "status": "failed", "reason": "No se pudo obtener HTML"}
 
-            html = await browser.get_html_from_url(context, url)
-            if not html:
-                storage.save_product(job_id, url, {"reason": "No se pudo obtener HTML"}, "failed")
-                return {"url": url, "status": "failed", "reason": "No se pudo obtener HTML"}
+                product_data = await extractor.extract_product_data_from_html(url, html)
+                if not product_data:
+                    storage.save_product(job_id, url, {"reason": "No se pudieron extraer datos"}, "failed")
+                    return {"url": url, "status": "failed", "reason": "No se pudieron extraer datos"}
 
-            product_data = await extractor.extract_product_data_from_html(url, html)
-            if not product_data:
-                storage.save_product(job_id, url, {"reason": "No se pudieron extraer datos"}, "failed")
-                return {"url": url, "status": "failed", "reason": "No se pudieron extraer datos"}
+                # Guardar en archivo y base de datos
+                with open("results.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps(product_data, ensure_ascii=False) + "\n")
+                storage.save_product(job_id, url, product_data, "success")
 
-            # Guardar en archivo y base de datos
-            with open("results.jsonl", "a", encoding="utf-8") as f:
-                f.write(json.dumps(product_data, ensure_ascii=False) + "\n")
-            storage.save_product(job_id, url, product_data, "success")
-
-            await pw_browser.close()
-            return {"url": url, "status": "success", "data": product_data['title']}
+                return {"url": url, "status": "success", "data": product_data['title']}
+            finally:
+                await context.close()
+                await pw_browser.close()
     except Exception as e:
         logging.exception(f"[URL Task] Falla catastrófica en {url}: {e}")
         task_self.update_state(state='FAILURE', meta=str(e))
@@ -259,6 +261,7 @@ async def create_scraping_job(req: ScrapeRequest):
     # las URLs. El número total y la lista de URLs se actualizarán una vez que
     # la tarea principal haya terminado la fase de descubrimiento.
     database.create_job(task.id, status="PENDING")
+    scale_worker_containers()
 
     return {"message": "Trabajo de scraping iniciado", "task_id": task.id}
 
