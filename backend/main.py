@@ -36,13 +36,13 @@ celery_app.conf.update(
 app = FastAPI(title="Scraper API", version="1.0.0")
 database.init_db()
 
-# Cada trabajo de scraping requiere tres procesos de worker por defecto. De este
-# modo se puede ajustar con variables de entorno en despliegues diferentes, pero
-# si no se especifica se garantizan tres workers por job como mínimo.
-WORKERS_PER_JOB = int(os.getenv("WORKERS_PER_JOB", "3"))
-# Cada contenedor de worker ejecuta también tres procesos de Celery por defecto
-# para que el número total de procesos coincida con el multiplicador anterior.
-WORKER_CONTAINER_CONCURRENCY = int(os.getenv("WORKER_CONCURRENCY", "3"))
+# Cada trabajo de scraping requiere cinco procesos de worker por defecto para
+# acelerar la extracción. Se puede ajustar mediante variables de entorno.
+WORKERS_PER_JOB = int(os.getenv("WORKERS_PER_JOB", "5"))
+# Cada contenedor de worker ejecuta también cinco procesos de Celery por
+# defecto para que el número total de procesos coincida con el multiplicador
+# anterior.
+WORKER_CONTAINER_CONCURRENCY = int(os.getenv("WORKER_CONCURRENCY", "5"))
 
 
 def scale_worker_containers() -> None:
@@ -138,8 +138,26 @@ async def scrape_single_url(task_self, job_id: str, url: str):
                     storage.save_product(job_id, url, {"reason": "No se pudo obtener HTML"}, "failed")
                     return {"url": url, "status": "failed", "reason": "No se pudo obtener HTML"}
 
-                product_data = await extractor.extract_product_data_from_html(url, html)
+                try:
+                    product_data = await extractor.extract_product_data_from_html(url, html)
+                except ValueError as err:
+                    reason = "HTML sin contenido" if str(err) == "EMPTY_CONTENT" else "Error de extracción"
+                    fallback = extractor.fallback_basic_extraction(url, html)
+                    if fallback:
+                        storage.save_product(job_id, url, fallback, "partial")
+                        return {"url": url, "status": "partial", "reason": reason}
+                    storage.save_product(job_id, url, {"reason": reason}, "failed")
+                    return {"url": url, "status": "failed", "reason": reason}
+
                 if not product_data:
+                    # Reintento automático en caso de fallo transitorio del LLM
+                    if task_self.request.retries < task_self.max_retries:
+                        logging.info(f"[URL Task] Reintentando extracción para {url}")
+                        raise task_self.retry(countdown=5)
+                    fallback = extractor.fallback_basic_extraction(url, html)
+                    if fallback:
+                        storage.save_product(job_id, url, fallback, "partial")
+                        return {"url": url, "status": "partial", "reason": "Extracción LLM fallida"}
                     storage.save_product(job_id, url, {"reason": "No se pudieron extraer datos"}, "failed")
                     return {"url": url, "status": "failed", "reason": "No se pudieron extraer datos"}
 

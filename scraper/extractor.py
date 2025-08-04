@@ -136,10 +136,13 @@ PRODUCT_SCHEMA = {
             }
         },
 
+        # Varios campos pueden no estar presentes en todas las páginas.  Se
+        # relaja el esquema marcándolos como opcionales para que la ausencia de
+        # información puntual no invalide toda la respuesta del modelo.
         "required": [
             "title", "brand", "presentation", "dosage_form", "active_ingredients", "concentration",
-            "price", "currency", "short_description", "category", "ean", "sku", "characteristics", 
-            "tags", "size_variant", "image_url", "inventory", "prescription_required", "is_full_product_page"
+            "price", "currency", "short_description", "category", "image_url", "inventory",
+            "prescription_required", "is_full_product_page"
         ],
 
         "additionalProperties": False
@@ -184,7 +187,7 @@ async def extract_product_data_from_html(url: str, html: str) -> dict | None:
 
     if not truncated_text:
         logging.warning(f"[Extractor] No se pudo extraer contenido procesable de {url}")
-        return None
+        raise ValueError("EMPTY_CONTENT")
 
     messages = [
         {
@@ -215,3 +218,65 @@ async def extract_product_data_from_html(url: str, html: str) -> dict | None:
     except Exception as e:  # pragma: no cover - best effort
         logging.error(f"[Extractor] Error en la llamada a GPT para {url}: {e}")
         return None
+
+
+def fallback_basic_extraction(url: str, html: str) -> dict | None:
+    """Extrae información mínima (título y precio) sin usar el modelo LLM."""
+    soup = BeautifulSoup(html, "lxml")
+    data: dict[str, object] = {"url": url}
+
+    # Intentar leer datos estructurados JSON-LD
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            ld_data = json.loads(script.string or "")
+        except Exception:
+            continue
+        if isinstance(ld_data, list):
+            ld_candidates = ld_data
+        else:
+            ld_candidates = [ld_data]
+        for item in ld_candidates:
+            if not isinstance(item, dict):
+                continue
+            if item.get("@type") == "Product":
+                if not data.get("title"):
+                    data["title"] = item.get("name")
+                offers = item.get("offers", {})
+                if isinstance(offers, dict):
+                    price = offers.get("price")
+                    currency = offers.get("priceCurrency")
+                    if price is not None:
+                        try:
+                            data["price"] = float(str(price).replace(",", "").replace("$", ""))
+                        except ValueError:
+                            pass
+                    if currency:
+                        data["currency"] = currency
+                if item.get("sku"):
+                    data["sku"] = item.get("sku")
+                if item.get("gtin13") or item.get("gtin"):
+                    data["ean"] = item.get("gtin13") or item.get("gtin")
+                break
+
+    # Fallback al DOM para título y precio si no están
+    if not data.get("title"):
+        title_tag = soup.find("h1")
+        if title_tag and title_tag.get_text(strip=True):
+            data["title"] = title_tag.get_text(strip=True)
+
+    if "price" not in data:
+        price_text = soup.find(text=re.compile(r"\$|COP|USD|€|EUR"))
+        if price_text:
+            match = re.search(r"([0-9]+[\.,]?[0-9]*)", price_text)
+            if match:
+                price_str = match.group(1).replace(".", "").replace(",", ".")
+                try:
+                    data["price"] = float(price_str)
+                except ValueError:
+                    pass
+            if "COP" in price_text:
+                data.setdefault("currency", "COP")
+            elif "USD" in price_text:
+                data.setdefault("currency", "USD")
+
+    return data if len(data) > 1 else None
