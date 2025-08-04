@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import random
 from typing import List
 
@@ -11,8 +12,13 @@ from playwright.async_api import (
 )
 
 # --- Configuración --- (Eventualmente mover a un archivo de config central)
-PAGE_TIMEOUT_MS = 30000  # 30 segundos
+PAGE_TIMEOUT_MS = int(os.getenv("PAGE_TIMEOUT_MS", "30000"))  # 30 segundos por defecto
 MAX_FETCH_RETRY = 3
+# Retraso configurable tras la carga de la página para simular al usuario.
+DELAY_RANGE = (
+    float(os.getenv("SCRAPER_DELAY_MIN", "0")),
+    float(os.getenv("SCRAPER_DELAY_MAX", "1")),
+)
 
 # Rotación básica de user agents para evitar bloqueos simples.
 USER_AGENTS: List[str] = [
@@ -64,7 +70,7 @@ async def get_html_from_url(context: BrowserContext, url: str) -> str | None:
             await page.wait_for_load_state("networkidle", timeout=15000)
 
             # Retardo aleatorio para simular navegación humana
-            await asyncio.sleep(random.uniform(1, 2.5))
+            await asyncio.sleep(random.uniform(*DELAY_RANGE))
 
             await _handle_cookie_banners(page)
             return await page.content()
