@@ -3,7 +3,6 @@
   "type": "module",
   "dependencies": {
     "@vercel/blob": "^1.1.1",
-    "@vercel/edge-config": "^1.4.0",
-    "node-fetch": "^3.3.2"
+    "@vercel/edge-config": "^1.4.0"
   }
 }
