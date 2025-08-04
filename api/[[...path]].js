@@ -23,20 +23,12 @@ export default async function handler(req, res) {
 
   const headers = { ...req.headers };
   // Drop hop-by-hop headers which can cause ``fetch`` to reject the request or
-  // forward incorrect values to the backend service.  ``fetch`` will populate
+  // forward incorrect values to the backend service. ``fetch`` will populate
   // the right ``Host`` header based on the target URL.
   delete headers.host;
   delete headers.connection;
   delete headers['content-length'];
   delete headers['accept-encoding'];
-
-  const headers = { ...req.headers };
-  // Drop hop-by-hop headers which can cause ``fetch`` to reject the request or
-  // forward incorrect values to the backend service.  ``fetch`` will populate
-  // the right ``Host`` header based on the target URL.
-  delete headers.host;
-  delete headers.connection;
-  delete headers['content-length'];
 
   const init = {
     method: req.method,

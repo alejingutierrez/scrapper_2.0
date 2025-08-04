@@ -28,24 +28,14 @@ export default async function handler(req, res) {
 
   const headers = { ...req.headers };
   // ``host`` (and a few hop-by-hop headers) should not be forwarded when
-  // proxying requests.  Setting them to ``undefined`` can result in invalid
-  // values being sent which in turn breaks the connection.  Instead explicitly
+  // proxying requests. Setting them to ``undefined`` can result in invalid
+  // values being sent which in turn breaks the connection. Instead explicitly
   // remove them so ``fetch`` generates the appropriate headers for the target
   // backend.
   delete headers.host;
   delete headers.connection;
   delete headers['content-length'];
   delete headers['accept-encoding'];
-
-  const headers = { ...req.headers };
-  // ``host`` (and a few hop-by-hop headers) should not be forwarded when
-  // proxying requests.  Setting them to ``undefined`` can result in invalid
-  // values being sent which in turn breaks the connection.  Instead explicitly
-  // remove them so ``fetch`` generates the appropriate headers for the target
-  // backend.
-  delete headers.host;
-  delete headers.connection;
-  delete headers['content-length'];
 
   const init = {
     method: req.method,
