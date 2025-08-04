@@ -13,6 +13,7 @@ import {
   TableRow,
   Paper,
   TablePagination,
+  Alert,
 } from '@mui/material';
 import { apiService } from '../services/api';
 import * as XLSX from 'xlsx';
@@ -35,6 +36,7 @@ export const UnifiedScraperPage: React.FC = () => {
   const [jobs, setJobs] = useState<JobInfo[]>([]);
   const [results, setResults] = useState<any[]>([]);
   const [page, setPage] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const rowsPerPage = 10;
   const dataKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -60,6 +62,8 @@ export const UnifiedScraperPage: React.FC = () => {
         pollStatus(resp.task_id);
         pollResults(resp.task_id);
       } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        setError(`Failed to start job for ${url}: ${message}`);
         console.error('Failed to start job for', url, e);
       }
     }
@@ -127,6 +131,11 @@ export const UnifiedScraperPage: React.FC = () => {
 
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto' }}>
+      {error && (
+        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
       <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>
         Web Scraper Dashboard
       </Typography>
