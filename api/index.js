@@ -1,3 +1,5 @@
+import fetch from 'node-fetch';
+
 // Determine backend URL. When running on Vercel the URL must be provided via
 // ``SCRAPER_API_URL``. For local development we fall back to the typical
 // ``localhost`` address so developers can run the backend separately without
@@ -19,11 +21,25 @@ export default async function handler(req, res) {
     return;
   }
 
-  const target = `${BACKEND_URL}/`;
+  // Build the target URL by removing the ``/api`` prefix from the incoming
+  // request and forwarding any query string to the backend service.
+  const reqUrl = new URL(req.url, 'http://localhost');
+  const target = new URL(reqUrl.pathname.replace(/^\/api/, '') + reqUrl.search, BACKEND_URL);
+
+  const headers = { ...req.headers };
+  // ``host`` (and a few hop-by-hop headers) should not be forwarded when
+  // proxying requests.  Setting them to ``undefined`` can result in invalid
+  // values being sent which in turn breaks the connection.  Instead explicitly
+  // remove them so ``fetch`` generates the appropriate headers for the target
+  // backend.
+  delete headers.host;
+  delete headers.connection;
+  delete headers['content-length'];
+  delete headers['accept-encoding'];
 
   const init = {
     method: req.method,
-    headers: { ...req.headers, host: undefined },
+    headers,
   };
 
   if (req.method !== 'GET' && req.method !== 'HEAD') {
