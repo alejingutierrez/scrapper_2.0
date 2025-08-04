@@ -1,3 +1,7 @@
+import axios from 'axios';
+import http from 'http';
+import https from 'https';
+
 // Determine backend URL. When running on Vercel the URL must be provided via
 // ``SCRAPER_API_URL``. For local development we fall back to the typical
 // ``localhost`` address so developers can run the backend separately without
@@ -21,26 +25,42 @@ export default async function handler(req, res) {
 
   const target = `${BACKEND_URL}/`;
 
-  const init = {
-    method: req.method,
-    headers: { ...req.headers, host: undefined },
-  };
+  const agent = BACKEND_URL.startsWith('https')
+    ? new https.Agent({ keepAlive: true })
+    : new http.Agent({ keepAlive: true });
 
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
-    init.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-    init.headers['Content-Type'] = 'application/json';
-  }
+  const headers = { ...req.headers };
+  // ``host`` (and a few hop-by-hop headers) should not be forwarded when
+  // proxying requests.  Setting them to ``undefined`` can result in invalid
+  // values being sent which in turn breaks the connection.  Instead explicitly
+  // remove them so ``fetch`` generates the appropriate headers for the target
+  // backend.
+  delete headers.host;
+  delete headers.connection;
+  delete headers['content-length'];
 
   try {
-    const response = await fetch(target, init);
-    const contentType = response.headers.get('content-type') || '';
+    const response = await axios({
+      url: target,
+      method: req.method,
+      headers,
+      data:
+        req.method !== 'GET' && req.method !== 'HEAD'
+          ? typeof req.body === 'string'
+            ? req.body
+            : JSON.stringify(req.body)
+          : undefined,
+      httpAgent: agent,
+      httpsAgent: agent,
+      validateStatus: () => true,
+    });
+
+    const contentType = response.headers['content-type'] || '';
     res.status(response.status);
     if (contentType.includes('application/json')) {
-      const data = await response.json();
-      res.json(data);
+      res.json(response.data);
     } else {
-      const text = await response.text();
-      res.send(text);
+      res.send(response.data);
     }
   } catch (error) {
     // When the backend is unreachable we still return HTTP 200 so the frontend

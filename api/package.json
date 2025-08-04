@@ -3,6 +3,7 @@
   "type": "module",
   "dependencies": {
     "@vercel/blob": "^1.1.1",
-    "@vercel/edge-config": "^1.4.0"
+    "@vercel/edge-config": "^1.4.0",
+    "axios": "^1.6.8"
   }
 }
