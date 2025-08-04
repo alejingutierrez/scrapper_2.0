@@ -1,3 +1,5 @@
+import fetch from 'node-fetch';
+
 // Determine backend URL. When running on Vercel the URL must be provided via
 // ``SCRAPER_API_URL``. For local development we fall back to the typical
 // ``localhost`` address so developers can run the backend separately without

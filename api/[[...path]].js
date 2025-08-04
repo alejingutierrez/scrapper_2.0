@@ -1,3 +1,5 @@
+import fetch from 'node-fetch';
+
 // ``SCRAPER_API_URL`` must be provided when running on Vercel. Locally we fall
 // back to the development server on ``localhost``.
 const BACKEND_URL =
