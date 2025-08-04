@@ -11,9 +11,11 @@ export default async function handler(req, res) {
   // environment variable configured) return a friendly health‑check response
   // instead of a 500 error.
   if (!BACKEND_URL) {
-    res
-      .status(200)
-      .json({ status: 'ok', message: 'SCRAPER_API_URL not configured' });
+    res.status(200).json({
+      status: 'ok',
+      message:
+        'SCRAPER_API_URL not configured. Please set this environment variable in your Vercel project settings.',
+    });
     return;
   }
 

@@ -8,9 +8,11 @@ export default async function handler(req, res) {
   const { path = [] } = req.query;
 
   if (!BACKEND_URL) {
-    res
-      .status(200)
-      .json({ status: 'error', message: 'SCRAPER_API_URL not configured' });
+    res.status(200).json({
+      status: 'error',
+      message:
+        'SCRAPER_API_URL not configured. Please set this environment variable in your Vercel project settings.',
+    });
     return;
   }
 
