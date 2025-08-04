@@ -4,10 +4,13 @@
   "outputDirectory": "frontend-react/build",
   "rewrites": [
     { "source": "/api", "destination": "/api/index.js" },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/[[...path]].js?path=$1"
-    },
+    { "source": "/api/(.*)", "destination": "/api/[[...path]].js?path=$1" },
+    { "source": "/static/(.*)", "destination": "/static/$1" },
+    { "source": "/manifest.json", "destination": "/manifest.json" },
+    { "source": "/favicon.ico", "destination": "/favicon.ico" },
+    { "source": "/robots.txt", "destination": "/robots.txt" },
+    { "source": "/logo192.png", "destination": "/logo192.png" },
+    { "source": "/logo512.png", "destination": "/logo512.png" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
