@@ -2,7 +2,7 @@
   "name": "api",
   "type": "module",
   "dependencies": {
-    "@vercel/blob": "^1.1.1",
+    "@vercel/blob": "^2.3.0",
     "@vercel/edge-config": "^1.4.0"
   }
 }
